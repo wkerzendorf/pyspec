@@ -2,6 +2,10 @@ import os
 import numpy as np
 from scipy import interpolate
 import logging
+import bz2
+import sqlite3
+import cPickle as pickle
+
 
 debug = True
 
@@ -31,7 +35,12 @@ class onedspec(object):
     def __repr__(self):
         return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [min, max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
 
-
+    def from_ascii(cls):
+        pass
+    
+    def from_fits(cls):
+        raise NotImplementedError('Reading from Fits is not implemented YET!!')
+        
     def __init__(self, *args, **kwargs):
         
         # If only one argument is passed, it is likely a text file or an array
@@ -271,5 +280,16 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
+    
+    def __conform__(self):
+        """
+            Function that will automatically return an sqlite binary.
+            This makes it easy to store it in sqlite databases.
+            Most of the time this is called in the background
+        """
+        if protocol is sqlite3.PrepareProtocol:
+            pickleSpec = pickle.dumps(self)
+            zSpec = bz2.compress(pickleSpec)
+            return sqlite3.Binary(zSpec)
         
             
