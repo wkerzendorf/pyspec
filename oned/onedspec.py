@@ -34,10 +34,14 @@ class onedspec(object):
     
     def __repr__(self):
         return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [min, max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
-
-    def from_ascii(cls):
-        pass
     
+    @classmethod
+    def from_ascii(cls, filename, **kwargs):
+        """use the same kwargs with loadtxt"""
+        data = np.loadtxt(filename, **kwargs)
+        return cls(data)
+
+    @classmethod
     def from_fits(cls):
         raise NotImplementedError('Reading from Fits is not implemented YET!!')
         
