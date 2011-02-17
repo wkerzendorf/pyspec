@@ -39,6 +39,7 @@ class onedspec(object):
     def from_ascii(cls, filename, **kwargs):
         """use the same kwargs with loadtxt"""
         data = np.loadtxt(filename, **kwargs)
+        print "tmp"
         return cls(data)
 
     @classmethod
@@ -46,9 +47,13 @@ class onedspec(object):
         raise NotImplementedError('Reading from Fits is not implemented YET!!')
         
     def __init__(self, *args, **kwargs):
-        
-        # If only one argument is passed, it is likely a text file or an array
-        if len(args) == 1:
+        if kwargs.has_key('type'):
+            if kwargs['type'] == 'ndarray':
+                self.data = args[0]
+        # If only one argument is passed, it is likely a text file or an arra
+        if isinstance(args[0], np.ndarray):
+                    self.data = args[0]
+        elif len(args) == 1:
             
             # If it is a string we assume a text file
             if type(args[0]) == str:
@@ -79,13 +84,13 @@ class onedspec(object):
                             
                         return onedspec_list
                             
-                    
+                
                 else:
                 
                     # Assume text file
                     
-                    data = np.loadtxt(args[0], unpack=True, **kwargs)
-                    self.wavelength, self.flux = data
+                    self.data = np.loadtxt(args[0], unpack=True, **kwargs)
+                    #self.wavelength, self.flux = self.data
                     
             elif type(args[0]) == onedspec:
                 self = args[0]
@@ -96,18 +101,37 @@ class onedspec(object):
         
         elif len(args) == 2:
             data = zip(*args)
-            self.wavelength, self.flux = args
+            
             
         else:
             raise ValueError('unknown spectrum input provided')
             
         
-        data = np.array(data)
-        self.data = data[np.argsort(data[:,0])] 
+        
         
         return None
         
-        
+    def getWavelength(self):
+        return self.data[:, 0]
+    def setWavelength(self, x):
+        self.data[:, 0]=x
+    def getFlux(self):
+        return self.data[:, 1]
+    def setFlux(self, y):
+        self.data[:, 1]=y
+    def setXY(self, val):
+        raise NotImplementedError('XY can\'t be set')
+    def getXY(self):
+        return self.data[:, 0], self.data[:, 1]
+    
+    x = property(getWavelength, setWavelength)
+    y = property(getFlux, setFlux)
+    
+    wavelength = x
+    flux = y
+    
+    xy=property(getXY, setXY)
+
         
     def __getitem__(self, index):
         
