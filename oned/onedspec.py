@@ -5,7 +5,7 @@ import logging
 import bz2
 import sqlite3
 import cPickle as pickle
-
+import pdb
 
 debug = True
 
@@ -33,14 +33,14 @@ class onedspec(object):
     """
     
     def __repr__(self):
-        return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [min, max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
+        return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
     
     @classmethod
     def from_ascii(cls, filename, **kwargs):
         """use the same kwargs with loadtxt"""
         data = np.loadtxt(filename, **kwargs)
-        print "tmp"
-        return cls(data)
+
+        return cls(data, type='ndarray')
 
     @classmethod
     def from_fits(cls):
@@ -139,9 +139,9 @@ class onedspec(object):
             
             new_index = self.wavelength.searchsorted(index)
 
-            return self.flux.__getitem__(new_index)
+            return self.data[index]
             
-        elif type(index) == slice:
+        elif isinstance(index, slice):
             start, stop, step = index.start, index.stop, index.step
 
             if isinstance(index.start, float):
@@ -150,10 +150,11 @@ class onedspec(object):
             if isinstance(index.stop, float):
                     stop = self.wavelength.searchsorted(index.stop)
                     
-            return [self.wavelength[slice(start,stop,step)], self.flux[slice(start,stop,step)]]
+            #return [self.wavelength[slice(start,stop,step)], self.flux[slice(start,stop,step)]]
+            return onedspec(self.data[slice(start,stop)], type='ndarray')
             
         else:
-            return self.flux.__getitem__(index)
+            return self.data[index]
             
     
     def _map(self, spectrum, **kwargs):
