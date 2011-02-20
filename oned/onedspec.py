@@ -8,6 +8,55 @@ import cPickle as pickle
 import pdb
 
 debug = True
+num_precission = 1e-14
+
+def spec_operation(func):
+    def convert_operands(self, operand):
+        """
+        Decorator to automatically prepare the given operand for operation.
+        Automatically checks for spectra and scalar units
+        """
+        
+        if isinstance(operand, self.__class__):
+            if self.op_mode != operand.op_mode:
+                raise ValueError("Both spectra need to have the same op_mode.\n"
+                                 "%s != %s" % (self.op_mode, operand.op_mode))
+            
+            else:
+                coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
+                coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
+                
+                resSelf = np.mean(np.diff(self.wavelength))
+                resOperand = np.mean(np.diff(operand.wavelength))
+                #Checking if spectral wavelength grids are the same
+                #that makes operations easy as they can just act on the np arrays
+                if  self.wavelength.shape[0] == operand.wavelength.shape[0] and \
+                    np.mean(np.abs(self.wavelength - operand.wavelength)) < num_precission:
+                    return func(self, operand.y)
+                    
+                #Checking if the spectral wavelength grids are the same on an overlaping grid
+                elif self[coMin:coMax].wavelength.shape[0] == \
+                    operand[coMin:coMax].wavelength.shape[0] and \
+                    np.mean(np.abs(self[coMin:coMax].wavelength - operand[coMin:coMax].wavelength)) < num_precission:
+                    return func(self[coMin:coMax], operand[coMin:coMax].y)
+                    
+                #Checking which resolution is lower and interpolating onto that grid
+                elif self.op_mode == "on_resolution":
+                    if resSelf > resOperand:
+                        return func(self, operand.interpolate(self.wavelength).y)
+                    else:
+                        return func(self.interpolate(operand.wavelength), operand.y)
+                else:
+                    raise NotImplementedError("Operation mode %s not implemented")
+                
+                
+        elif np.isscalar(operand):
+            return func(self, operand)
+        
+        else:
+            raise ValueError("unsupported operand type(s) for operation: %s and %s" %
+                             (type(self), type(operand)))
+    return convert_operands
 
 class onedspec(object):
 
@@ -40,16 +89,19 @@ class onedspec(object):
         """use the same kwargs with loadtxt"""
         data = np.loadtxt(filename, **kwargs)
 
-        return cls(data, type='ndarray')
+        return cls(data[:,:2], type='ndarray')
 
     @classmethod
     def from_fits(cls):
         raise NotImplementedError('Reading from Fits is not implemented YET!!')
         
     def __init__(self, *args, **kwargs):
+        
         if kwargs.has_key('type'):
             if kwargs['type'] == 'ndarray':
                 self.data = args[0]
+                
+        #---- auto check-----
         # If only one argument is passed, it is likely a text file or an arra
         if isinstance(args[0], np.ndarray):
                     self.data = args[0]
@@ -108,7 +160,7 @@ class onedspec(object):
             
         
         
-        
+        self.op_mode = 'on_resolution'
         return None
         
     def getWavelength(self):
@@ -156,46 +208,20 @@ class onedspec(object):
         else:
             return self.data[index]
             
-    
-    def _map(self, spectrum, **kwargs):
+    def interpolate(self, wl_reference, mode='linear'):
+        """
+        Interpolate your spectrum on the reference wavelength grid.
         
         """
-        
-        Maps a spectra onto a common, union wavelength space with the spectrum
-        provided.
-        
-        """
-        
-        # Are they on the same lambda space?
-        try:
-            difference = np.abs(self.wavelength - spectrum.wavelength)
-        
-        except ValueError:
-            # Shape mismatch, they have different mappings
-            
-            
-            self_resolution, spectrum_resolution = [np.median(np.diff(item.wavelength)) for item in [self, spectrum]]
-            
-            if self_resolution > spectrum_resolution:
-                if debug: logging.info('onedspec._map: from self (%s) to spectrum (%s)' % (self, spectrum,))
-                f = interpolate.interp1d(self.wavelength, self.flux, kind='linear', copy=False, **kwargs)
-                
-                return self.__class__(spectrum.wavelength, f(spectrum.wavelength))
-            
-            else:
-                if debug: logging.info('onedspec._map: from spectrum (%s) to self (%s)' % (spectrum, self,))
-                f = interpolate.interp1d(spectrum.wavelength, spectrum.flux, kind='linear', copy=False, **kwargs)
-                
-                return self.__class__(self.wavelength, f(self.wavelength))
-        
+        if mode == 'linear':
+            f = interpolate.interp1d(self.wavelength, self.flux, kind='linear', copy=False)
+            return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
         else:
-            if np.max(difference) == 0.0:
-                # Same wavelength map, no interpolation required
-                
-                return self
-        
-        
-    def __add__(self, spectrum, **kwargs):
+            return NotImplementedError()
+
+
+    @spec_operation
+    def __add__(self, operand):
         """
         
         Adds two spectra together, or adds finite real numbers across an entire
@@ -203,85 +229,45 @@ class onedspec(object):
         
         """
         
-        if type(spectrum) == self.__class__:
-            
-            # Ensure the two spectra are mapped onto the same wavelength space
-            spectrum = spectrum._map(self, **kwargs)
-            self = self._map(spectrum, **kwargs)
-            
-            return self.__class__(self.wavelength, self.flux + spectrum.flux)
-                
-        
-        elif np.alltrue(np.isfinite(spectrum)):
-            return self.__class__(self.wavelength, self.flux + spectrum)
-        
-        else: raise TypeError("unsupported operand type(s) for +: '%s' and '%s'" % (type(self), type(spectrum),))
-                         
-    
-    def __sub__(self, spectrum, **kwargs):
-        
-        """
-        
-        Subtracts two spectra together, or subtracts finite real numbers across
-        an entire spectrum.
-        
-        """
-        
-        if type(spectrum) == self.__class__:
-            
-            spectrum = spectrum._map(self, **kwargs)
-            self = self._map(spectrum, **kwargs)
-            
-            return self.__class__(self.wavelength, self.flux - spectrum.flux)
-            
-        elif np.alltrue(np.isfinite(spectrum)):
-            return self.__class__(self.wavelength, self.flux - spectrum)
-            
-        else: raise TypeError("unsupported operand type(s) for -: '%s' and '%s'" % (type(self), type(spectrum),))
+        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
         
 
-    def __mul__(self, spectrum, **kwargs):
+    @spec_operation
+    def __sub__(self, operand):
         """
         
-        Multiplies two spectra together, or multiplies finite real numbers across
-        an entire spectrum.
+        Adds two spectra together, or adds finite real numbers across an entire
+        spectrum.
         
         """
+        
+        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        
 
-        if type(spectrum) == self.__class__:
-            
-            spectrum = spectrum._map(self, **kwargs)
-            self = self._map(spectrum, **kwargs)
-            
-            return self.__class__(self.wavelength, self.flux * spectrum.flux)
-            
-        elif np.alltrue(np.isfinite(spectrum)):
-            return self.__class__(self.wavelength, self.flux * spectrum)
-            
-        else: raise TypeError("unsupported operand type(s) for *: '%s' and '%s'" % (type(self), type(spectrum),))
-    
-        
-    def __div__(self, spectrum, **kwargs):
+    @spec_operation
+    def __mul__(self, operand):
         """
         
-        Divides two spectra together, or divides finite real numbers across an
-        entire spectrum.
+        Adds two spectra together, or adds finite real numbers across an entire
+        spectrum.
         
         """
         
-        if type(spectrum) == self.__class__:
-            
-            spectrum = spectrum._map(self, **kwargs)
-            self = self._map(spectrum, **kwargs)
-            
-            return self.__class__(self.wavelength, self.flux / spectrum.flux)
-            
-        elif np.alltrue(np.isfinite(spectrum)):
-            return self.__class__(self.wavelength, self.flux / spectrum)
-            
-        else: raise TypeError("unsupported operand type(s) for /: '%s' and '%s'" % (type(self), type(spectrum),))
-            
-      
+        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        
+
+    @spec_operation
+    def __div__(self, operand):
+        """
+        
+        Adds two spectra together, or adds finite real numbers across an entire
+        spectrum.
+        
+        """
+        
+        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        
+
     # Mirror functions
     
     def __radd__(self, spectrum, **kwargs):
@@ -317,8 +303,6 @@ class onedspec(object):
             Most of the time this is called in the background
         """
         if protocol is sqlite3.PrepareProtocol:
-            pickleSpec = pickle.dumps(self)
-            zSpec = bz2.compress(pickleSpec)
-            return sqlite3.Binary(zSpec)
+            return sqlite3.Binary(self.data.tostring())
         
             
