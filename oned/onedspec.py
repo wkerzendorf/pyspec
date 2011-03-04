@@ -99,64 +99,68 @@ class onedspec(object):
         
         if kwargs.has_key('type'):
             if kwargs['type'] == 'ndarray':
-                self.data = args[0]
-                
-        #---- auto check-----
-        # If only one argument is passed, it is likely a text file or an arra
-        if isinstance(args[0], np.ndarray):
-                    self.data = args[0]
-        elif len(args) == 1:
-            
-            # If it is a string we assume a text file
-            if type(args[0]) == str:
-            
-                extension = args[0].split('.')[-1].lower()
-                
-                if extension == 'fits':
 
-                    try:                    
-                        import pyfits
+                self.data = args[0]
+            elif kwargs['type'] ==  'waveflux':
+
+                self.data = np.array(zip(args[0], args[1]))
+        else:        
+            #---- auto check-----
+            # If only one argument is passed, it is likely a text file or an arra
+            if isinstance(args[0], np.ndarray):
+                        self.data = args[0]
+            elif len(args) == 1:
+                
+                # If it is a string we assume a text file
+                if type(args[0]) == str:
+                
+                    extension = args[0].split('.')[-1].lower()
                     
-                    except ImportError:
-                        raise ImportError('FITS extension recognised and pyfits could not be imported')
+                    if extension == 'fits':
+    
+                        try:                    
+                            import pyfits
+                        
+                        except ImportError:
+                            raise ImportError('FITS extension recognised and pyfits could not be imported')
+                        
+                        else:
+                            
+                            fits_file = pyfits.open(args[0])
+                            
+                            # Assume the data is stored in the first item of the HDU list
+                            # for the moment.
+                            
+                            # todo - make this smarter
+                            onedspec_list = []
+                            spectrum_data = fits_file[0].data
+                            
+                            for item in spectrum_data:
+                                onedspec_list.append(self.__class__(np.arange(0, item.shape[0]), item))
+                                
+                            return onedspec_list
+                                
                     
                     else:
+                    
+                        # Assume text file
                         
-                        fits_file = pyfits.open(args[0])
+                        self.data = np.loadtxt(args[0], unpack=True, **kwargs)
+                        #self.wavelength, self.flux = self.data
                         
-                        # Assume the data is stored in the first item of the HDU list
-                        # for the moment.
-                        
-                        # todo - make this smarter
-                        onedspec_list = []
-                        spectrum_data = fits_file[0].data
-                        
-                        for item in spectrum_data:
-                            onedspec_list.append(self.__class__(np.arange(0, item.shape[0]), item))
-                            
-                        return onedspec_list
-                            
-                
+                elif type(args[0]) == onedspec:
+                    self = args[0]
+                    
                 else:
+                    data = args[0]
+            
+            
+            elif len(args) == 2:
+                data = zip(*args)
                 
-                    # Assume text file
-                    
-                    self.data = np.loadtxt(args[0], unpack=True, **kwargs)
-                    #self.wavelength, self.flux = self.data
-                    
-            elif type(args[0]) == onedspec:
-                self = args[0]
                 
             else:
-                data = args[0]
-        
-        
-        elif len(args) == 2:
-            data = zip(*args)
-            
-            
-        else:
-            raise ValueError('unknown spectrum input provided')
+                raise ValueError('unknown spectrum input provided')
             
         
         
@@ -179,8 +183,11 @@ class onedspec(object):
     x = property(getWavelength, setWavelength)
     y = property(getFlux, setFlux)
     
+    #adding similar nomenclature like in pysynphot
     wavelength = x
+    wave = x
     flux = y
+    
     
     xy=property(getXY, setXY)
 
@@ -229,7 +236,7 @@ class onedspec(object):
         
         """
         
-        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        return self.__class__(self.wavelength, self.flux + operand, type='waveflux')
         
 
     @spec_operation
@@ -241,7 +248,7 @@ class onedspec(object):
         
         """
         
-        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        return self.__class__(self.wavelength, self.flux + operand, type='waveflux')
         
 
     @spec_operation
@@ -253,7 +260,7 @@ class onedspec(object):
         
         """
         
-        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        return self.__class__(self.wavelength, self.flux * operand, type='waveflux')
         
 
     @spec_operation
@@ -265,7 +272,7 @@ class onedspec(object):
         
         """
         
-        return self.__class__(np.array(zip(self.wavelength, self.flux + operand)), type='ndarray')
+        return self.__class__(self.wavelength, self.flux / operand, type='waveflux')
         
 
     # Mirror functions
@@ -282,8 +289,31 @@ class onedspec(object):
     def __rdiv__(self, spectrum, **kwargs):
         return self.__div__(spectrum, **kwargs)
     
+    def add_noise(self, reqS2N, assumS2N=np.inf):
+        #Adding noise to the spectrum. you can give it required noise and assumedNoise
+        #remember 1/inf =0 for synthetic spectra
+        noiseKernel = np.sqrt( (1/float(reqS2N))**2 - (1/assumS2N)**2)
+        
+        def makeNoise(item):
+            return numpy.random.normal(item,noiseKernel*item)
+            
+            
+        makeNoiseArray = np.vectorize(makeNoise)
+        newy = makeNoiseArray(self.y)
+        return self.__class__(self.x, newy, type='waveflux')
 
 
+    def shiftVelocity(self,v=None,z=None):
+        #shift the spectrum given a velocity or a redshift. velocity is assumed to be in km/s
+        if v==None and z==None:
+            raise ValueError('Please provide either v or z to shift it')
+        #Velocity in km/s
+        c=3e5
+        if v != None:
+            return self.__class__(self.x * np.sqrt((1+v/c)/(1-v/c)), self.y, type='waveflux')
+            
+        elif z!=None:
+            return self.__class__(self.x*(1+z) , self.y, type='waveflux')
     def gaussian_smooth(self, kernel, **kwargs):
         """
         
