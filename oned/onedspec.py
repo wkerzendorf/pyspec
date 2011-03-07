@@ -198,7 +198,7 @@ class onedspec(object):
             
             new_index = self.wavelength.searchsorted(index)
 
-            return self.data[index]
+            return self.flux[new_index]
             
         elif isinstance(index, slice):
             start, stop, step = index.start, index.stop, index.step

@@ -4,6 +4,47 @@ import scipy
 import scipy.optimize
 
 def fitprof(spectrum, line, peak_pm=1.5):
+    """
+    
+    Fits a profile to a given spectrum at the line point. The peak value must be
+    found in order to fit the peak correctly, so a +/- region is allowed to find
+    the location of the peak.
+    
+    
+    Inputs
+    ------
+    
+    spectrum    :   Spectrum to fit a line profile to. Must be a :class:`onedspec`
+                    class object.
+                    
+    line        :   Floating point location of the line (Angstroms)
+    
+    peak_pm     :   The peak of the profile will be found in the region from
+                    (line - peak_pm) to (line + peak_pm). This can be set to
+                    zero if the peak of the profile is already known.
+                    
+                    
+    Outputs
+    -------
+    
+    peak        :   Peak value of the profile found
+    
+    position    :   Position of the profile centroid (Angstroms)
+    
+    sigma       :   Gaussian sigma found for the best-fitting profile.
+    
+    """
+
+    if not isinstance(spectrum, onedspec):
+        return ValueError('Spectrum must be a onedspec class object')
+        
+    try:
+        line = float(line)
+        
+    except TypeError:
+        raise TypeError('Line profile position must be a floating point.')
+        
+        
     
     peak_spectrum = spectrum[line - peak_pm:peak_pm + line]
     
