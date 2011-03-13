@@ -2,10 +2,10 @@ import os
 import numpy as np
 from scipy import interpolate
 import logging
-import bz2
 import sqlite3
 import cPickle as pickle
 import pdb
+import pyfits
 
 debug = True
 num_precission = 1e-14
@@ -99,8 +99,8 @@ class onedspec(object):
         if not (header.has_key('CRVAL1') and header.has_key('CDELT1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CDELT1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        wave = np.arange(header['CRVAL1'], (header['NAXIS1'] + 1)*header['CDELT1'], header['CDELT1'])
-        return wave, fitsFile[0].data
+        wave = np.arange(header['CRVAL1'], header['CRVAL1'] + (header['NAXIS1'])*header['CDELT1'], header['CDELT1'])
+        return cls(wave, fitsFile[0].data, type='waveflux')
         
     def __init__(self, *args, **kwargs):
         
