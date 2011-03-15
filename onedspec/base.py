@@ -23,33 +23,54 @@ def spec_operation(func):
                                  "%s != %s" % (self.op_mode, operand.op_mode))
             
             else:
-                coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
-                coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
-                
-                # Form the union
-                self = self[coMin:coMax]
-                operand = operand[coMin:coMax]
 
                 
                 resSelf = np.mean(np.diff(self.wavelength))
                 resOperand = np.mean(np.diff(operand.wavelength))
+
                 #Checking if spectral wavelength grids are the same
                 #that makes operations easy as they can just act on the np arrays
                 if  self.wavelength.shape[0] == operand.wavelength.shape[0] and \
                     np.mean(np.abs(self.wavelength - operand.wavelength)) < num_precission:
+                    
                     return func(self, operand.y)
                     
                 #Checking if the spectral wavelength grids are the same on an overlaping grid
-                elif self[coMin:coMax].wavelength.shape[0] == \
-                    operand[coMin:coMax].wavelength.shape[0] and \
-                    np.mean(np.abs(self[coMin:coMax].wavelength - operand[coMin:coMax].wavelength)) < num_precission:
-                    return func(self[coMin:coMax], operand[coMin:coMax].y)
+                elif self.wavelength.shape[0] == \
+                    operand.wavelength.shape[0] and \
+                    np.mean(np.abs(self.wavelength - operand.wavelength)) < num_precission:
                     
+                    return func(self, operand.y)
+                
                 #Checking which resolution is lower and interpolating onto that grid
                 elif self.op_mode == "on_resolution":
+                    
+                    coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
+                    coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
+                    
                     if resSelf > resOperand:
+                        # We interpolate on self, so self must be union of operand
+                        
+                        self = self[coMin:coMax]
+                        operand = operand[coMin:coMax]
+                        
+                        # And here's the cure for spectrum cancer...
+                        
+                        if (self.x[0] < operand.x[0]): self.data[0] = self.interpolate(operand.x[0]).data    
+                        if (self.x[-1] > operand.x[-1]): self.data[-1] = self.interpolate(operand.x[-1]).data
+                            
                         return func(self, operand.interpolate(self.wavelength).y)
                     else:
+                        # We interpolate on operand, so operand must be union of self
+
+                        self = self[coMin:coMax]
+                        operand = operand[coMin:coMax]
+                        
+                        # And here's the cure for spectrum cancer...
+
+                        if operand.x[0] < self.x[0]: operand.data[0] = operand.interpolate(self.x[0]).data
+                        if operand.x[-1] > self.x[-1]: operand.data[-1] = operand.interpolate(self.x[-1]).data
+                            
                         return func(self.interpolate(operand.wavelength), operand.y)
                 else:
                     raise NotImplementedError("Operation mode %s not implemented")
@@ -87,7 +108,7 @@ class onedspec(object):
     """
     
     def __repr__(self):
-        return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
+        return r'<onedspec object over [%3.5f to %3.5f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
     
     @classmethod
     def from_ascii(cls, filename, **kwargs):
@@ -205,7 +226,7 @@ class onedspec(object):
 
         
     def __getitem__(self, index):
-        
+
         if isinstance(index, float):
             
             new_index = self.wavelength.searchsorted(index)
@@ -216,12 +237,9 @@ class onedspec(object):
 
             if isinstance(index.start, float):
                     start = self.wavelength.searchsorted(index.start)
-                    if self.x[start] < index.start: stop += 1
-                    
                     
             if isinstance(index.stop, float):
                     stop = self.wavelength.searchsorted(index.stop)
-                    if len(self.x) > stop and self.x[stop] > index.stop: stop -= 1
             
             return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
@@ -235,9 +253,11 @@ class onedspec(object):
         """
 
         if mode == 'linear':
-            
             f = interpolate.interp1d(self.wavelength, self.flux, kind='linear', copy=False)
-            return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
+            if isinstance(wl_reference, float):
+                return self.__class__(np.array([wl_reference, f(wl_reference)]), type='ndarray')
+            else:
+                return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
         else:
             return NotImplementedError('Non-linear interpolation not implemented yet.')
 
