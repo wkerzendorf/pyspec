@@ -100,7 +100,8 @@ class onedspec(object):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CDELT1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
         wave = np.arange(header['CRVAL1'], header['CRVAL1'] + (header['NAXIS1'])*header['CDELT1'], header['CDELT1'])
-        return cls(wave, fitsFile[0].data, type='waveflux')
+        flux = fitsFile[0].data.reshape([item for item in fitsFile[0].data.shape if item!=1])
+        return cls(wave, flux, type='waveflux')
         
     def __init__(self, *args, **kwargs):
         
@@ -332,6 +333,12 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
+    
+    def to_ascii(self, filename):
+        pass
+    
+    def to_fits(self, filename):
+        pass
     
     def __conform__(self):
         """
