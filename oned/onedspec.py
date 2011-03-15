@@ -26,6 +26,11 @@ def spec_operation(func):
                 coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
                 coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
                 
+                # Form the union
+                self = self[coMin:coMax]
+                operand = operand[coMin:coMax]
+
+                
                 resSelf = np.mean(np.diff(self.wavelength))
                 resOperand = np.mean(np.diff(operand.wavelength))
                 #Checking if spectral wavelength grids are the same
@@ -204,7 +209,6 @@ class onedspec(object):
         if isinstance(index, float):
             
             new_index = self.wavelength.searchsorted(index)
-
             return self.flux[new_index]
             
         elif isinstance(index, slice):
@@ -212,12 +216,14 @@ class onedspec(object):
 
             if isinstance(index.start, float):
                     start = self.wavelength.searchsorted(index.start)
+                    if self.x[start] < index.start: stop += 1
+                    
                     
             if isinstance(index.stop, float):
                     stop = self.wavelength.searchsorted(index.stop)
-                    
-            #return [self.wavelength[slice(start,stop,step)], self.flux[slice(start,stop,step)]]
-            return onedspec(self.data[slice(start,stop)], type='ndarray')
+                    if len(self.x) > stop and self.x[stop] > index.stop: stop -= 1
+            
+            return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
         else:
             return self.data[index]
@@ -227,11 +233,13 @@ class onedspec(object):
         Interpolate your spectrum on the reference wavelength grid.
         
         """
+
         if mode == 'linear':
+            
             f = interpolate.interp1d(self.wavelength, self.flux, kind='linear', copy=False)
             return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
         else:
-            return NotImplementedError()
+            return NotImplementedError('Non-linear interpolation not implemented yet.')
 
 
     @spec_operation
