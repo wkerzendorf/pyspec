@@ -8,7 +8,7 @@ import pdb
 import pyfits
 
 debug = True
-num_precission = 1e-14
+num_precission = 1e-6
 
 def spec_operation(func):
     def convert_operands(self, operand):
@@ -48,30 +48,65 @@ def spec_operation(func):
                     coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
                     coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
                     
+                    operand_bound = operand[coMin:coMax]
+                    self_bound = self[coMin:coMax]
+                    print 'comin, comax', coMin, coMax
+                    
+                    # Check the edges
+                    union_end = False
+                    union_start = False
+                    
+                    if operand_bound.x[0] > self_bound.x[0]:
+                        # operand needs an insert of self.x[0]
+                        print 'a1'
+                        operand_bound.data = operand_bound.data[1::]
+                        union_start = operand.interpolate(self_bound.x[0]).data
+                        #operand_bound.data = np.insert(operand_bound.data, 0, operand.interpolate(self_bound.x[0]).data, axis=0)
+                        
+                    elif self_bound.x[0] > operand_bound.x[0]:
+                        print 'a2', self_bound.x[0], operand_bound.x[0], self_bound.data[0]
+                        # self needs an insert of operand.x[0]
+                        self_bound.data = self_bound.data[1::]
+                        union_start = self.interpolate(operand_bound.x[0]).data
+                        #self_bound.data = np.insert(self_bound.data, 0, self.interpolate(operand_bound.x[0]).data, axis=0)
+                        print 'a2', self_bound.data[0]
+                    
+                    if self.x[-1] > operand_bound.x[-1]:
+                        print 'a3'
+                        # self needs an append of operand.x[-1]
+                        self_bound.data = self_bound.data[:-1:]
+                        union_end = self.interpolate(operand_bound.x[-1]).data
+                        
+                    elif operand.x[-1] > self_bound.x[-1]:
+                        print 'a4', self_bound.x[-1], operand_bound.x[-1], operand_bound.data[-1]
+                        # operand needs an append of self.x[-1]
+                        operand_bound.data = operand_bound.data[:-1:]
+                        union_end = operand.interpolate(self_bound.x[-1]).data
+                        #operand_bound.data = np.append(operand_bound.data, [operand.interpolate(self_bound.x[-1] - num_precission).data], axis=0)
+                        print 'a4', operand_bound.data[-1]
+                    
+                    
+                    
                     if resSelf > resOperand:
-                        # We interpolate on self, so self must be union of operand
+                        print 'b1'
+                        u_x = self_bound
+                        if type(union_end) != type(bool):
+                            u_x.data = np.append(u_x.data, [union_end], axis=0)
+                        if type(union_start) != type(bool):
+                            u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
+                        u_y = operand.interpolate(self_bound.x).y
                         
-                        self = self[coMin:coMax]
-                        operand = operand[coMin:coMax]
-                        
-                        # And here's the cure for spectrum cancer...
-                        
-                        if (self.x[0] < operand.x[0]): self.data[0] = self.interpolate(operand.x[0]).data    
-                        if (self.x[-1] > operand.x[-1]): self.data[-1] = self.interpolate(operand.x[-1]).data
-                            
-                        return func(self, operand.interpolate(self.wavelength).y)
                     else:
-                        # We interpolate on operand, so operand must be union of self
-
-                        self = self[coMin:coMax]
-                        operand = operand[coMin:coMax]
+                        print 'b2'
+                        u_x = self.interpolate(operand_bound.x)
+                        if type(union_start) != type(bool):
+                            u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
+                        if type(union_end) != type(bool):
+                            u_x.data = np.append(u_x.data, [union_end], axis=0)
+                        u_y = operand_bound.y
                         
-                        # And here's the cure for spectrum cancer...
-
-                        if operand.x[0] < self.x[0]: operand.data[0] = operand.interpolate(self.x[0]).data
-                        if operand.x[-1] > self.x[-1]: operand.data[-1] = operand.interpolate(self.x[-1]).data
-                            
-                        return func(self.interpolate(operand.wavelength), operand.y)
+                        
+                    return func(u_x, u_y)
                 else:
                     raise NotImplementedError("Operation mode %s not implemented")
                 
@@ -236,10 +271,11 @@ class onedspec(object):
             start, stop, step = index.start, index.stop, index.step
 
             if isinstance(index.start, float):
-                    start = self.wavelength.searchsorted(index.start)
+                start = self.wavelength.searchsorted(index.start)
                     
             if isinstance(index.stop, float):
-                    stop = self.wavelength.searchsorted(index.stop)
+                stop = self.wavelength.searchsorted(index.stop)
+                if len(self.x) > stop: stop += 1
             
             return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
