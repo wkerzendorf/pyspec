@@ -312,6 +312,13 @@ class onedspec(object):
         
         return self.__class__(self.wavelength, self.flux / operand, type='waveflux')
         
+    @spec_operation
+    def __pow__(self, operand):
+        
+        """Performs power operations on spectra."""
+        
+        return self.__class__(self.wavelength, self.flux ** operand, type='waveflux')
+        
 
     # Mirror functions
     
@@ -326,6 +333,9 @@ class onedspec(object):
             
     def __rdiv__(self, spectrum, **kwargs):
         return self.__div__(spectrum, **kwargs)
+    
+    def __rpow__(self, spectrum, **kwargs):
+        return self.__pow__(spectrum, **kwargs)
     
     def add_noise(self, reqS2N, assumS2N=np.inf):
         #Adding noise to the spectrum. you can give it required noise and assumedNoise
