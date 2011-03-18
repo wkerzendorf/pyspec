@@ -1,7 +1,11 @@
-#from onedspec import onedspec
+from base import onedspec
+
 import numpy as np
 import scipy
 import scipy.optimize
+from matplotlib.pyplot import *
+import matplotlib.pyplot as plt
+
 
 def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     """
@@ -132,6 +136,8 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         
         m = m1 * np.transpose(m2)
         
+        return onedspec(synthetic.wavelength, m, type='waveflux')
+        
         
         in_continuum, region_start, wavelength_points = (False, 0, len(m))
         continuum_regions = []
@@ -251,5 +257,321 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         return profiles[0]
     
     return profiles
+
+
+def normalise(spectrum, function='legendre', order=3, low_reject=0.5, high_reject=2.0,
+              niterate=10, grow=1.):
+
+    """
+    
+    A one dimensional spectrum is fit to the continuum of the spectra provided. The
+    resulting spectrum is the original spectrum which has been flux normalised. The
+    fitted function may be a legendre polynomial, chebyshev polynomial, spline, or
+    a beizer spline.
+    
+    Inputs
+    ------
+    
+    spectrum    :   Spectrum to be continuum normalised. This must be a onedspec
+                    class.
+                    
+    function    :   The function type to fit to the continuum. The available options
+                    are 'legendre' polynomial, 'chebyshev' polynomial, a 'spline' or
+                    a 'biezer' spline.
+                    
+    order       :   The order of the fitting polynomial or spline.
+    
+    low_reject  :   Rejection limit below the continuum fit in units of the residual
+                    sigma.
+                    
+    high_reject :   Rejection limit above the continuum fit in units of the residual
+                    sigma.
+    
+    niterate    :   Maximum number of rejection iterations.
+    
+    grow        :   There are two types of input for this argument. If an integer is
+                    supplied, then when a pixel range is rejected pixels within this
+                    distance are also rejected. If a float is specified then a line
+                    will try to be fitted to the rejection region. If the region is
+                    well characterised by a fitted profile, then the number of sigma
+                    specified by the grow float on either side will be rejected. If
+                    no profile is fitted, then the number of pixels on either side
+                    will be rejected.
+    
+    """
+
+    # Input checks
+    
+    functions = ['legendre', 'chebyshev', 'spline', 'biezer']
+    
+    if function not in functions:
+        raise ValueError('Unknown continuum function type specified (%s). Available function types are: %s' % (function, ', '.join(functions), ))
+    
+    try: order = int(order)
+    except ValueError: raise TypeError('Invalid input for profile order; \'%s\'. Order must be an integer-type.' % (order, ))
+    
+    try: low_reject = float(low_reject)
+    except ValueError: raise TypeError('Invalid input for lower rejection limit; \'%s\'. Rejection limit must be a float-type.' % (low_reject, ))
+    
+    try: high_reject = float(high_reject)
+    except ValueError: raise TypeError('Invalid input for higher rejection limit; \'%s\'. Rejection limit must be a float-type.' % (high_reject, ))
+    
+    try: niterate = int(niterate)
+    except ValueError: raise TypeError('Invalid input for maximum interation number; \'%s\'. Maximum iteration number must be an integer-type.' % (niterate, ))
+    
+    if type(grow) not in [float, int]:
+        raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
+    
+    
+    from matplotlib.patches import Rectangle
+    
+    if function == 'legendre':
+
+        sample = len(spectrum.x) + 1
+        positions, values = spectrum.x, spectrum.y
+        
+        while (niterate > 0) and (sample > len(positions)):
+            
+            sample = len(positions)
+            print "len of positions and values", len(positions), len(values)
+            coeffs = scipy.polyfit(positions, values, order)
+            #continuum = scipy.polyval(coeffs, positions)
+            continuum = scipy.polyval(coeffs, spectrum.x)
+            
+            residual = spectrum.y - continuum
+            sigma = np.std(residual)
+            
+            sigma_residual = residual/sigma
+            
+            fig = figure()
+            ax = fig.add_subplot(131)
+            
+            ax.plot(spectrum.x, spectrum.y)
+            ax.plot(spectrum.x, continuum, 'k', linewidth=2.0)
+            
+            ax = fig.add_subplot(132)
+            ax.plot(spectrum.x, sigma_residual)
+        
+            allowed = np.zeros(len(spectrum.x))
+            for i, val in enumerate(sigma_residual):
+                if high_reject > val and val > -low_reject:
+                    allowed[i] = 1
+                else:
+                    allowed[i] = 0
+                
+            print 'max allowed', max(allowed)
+
+            """
+            i = 0
+            while (len(allowed) > i):
+                if allowed[i] == 0:
+                    rs = np.max([0, i-grow])
+                    re = np.min([len(allowed)-1, i+grow])
+
+                    i += grow
+                    allowed[rs:re] = np.zeros(re-rs)
+                elif allowed[i] == 99:
+                    allowed[i] = 0
+                i += 1
+            """
+            
+            
+            in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
+            
+            continuum_regions = []
+            for i, is_continuum in enumerate(allowed):
+                          
+                                
+                if is_continuum and not in_continuum: # Continuum region starts
+                    region_start, in_continuum = spectrum.wavelength[i], True
+                    
+                    
+                elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
+                    region_end, in_continuum = spectrum.wavelength[i-1], False
+                    
+                    if (region_end - region_start) > 1.:
+                        continuum_regions.append((region_start, region_end))
+    
+            
+            for continuum_region in continuum_regions:
+
+                continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), (low_reject + high_reject), facecolor='#cccccc', alpha=0.5)
+                ax.add_patch(continuum_patch)
+                plt.draw()
+                
+        
+            positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
+            niterate -= 1
+        
+        """
+        positions, values = spectrum.x, spectrum.y
+         
+        close('all')
+        sample = len(positions) + 1
+        allowed = np.ones(len(spectrum.x))
+        while (niterate > 0):# and (sample > len(positions)):
+            sample = len(positions)
+            coeffs = scipy.polyfit(positions, values, order)
+            continuum = scipy.polyval(coeffs, spectrum.x)
+            
+            # Determine the high/low rejections
+            
+            residual = spectrum.y - continuum
+            sigma = np.std(residual)
+            print 'sigma', sigma
+            
+            
+            #sigma_residual = residual/sigma
+
+            sigma_residual = scipy.where(allowed > 0, residual/sigma, 99)
+            normalised = spectrum.y / continuum
+            
+            
+            #high_allow = scipy.where(sigma_residual > high_reject, 1, 0)
+            #low_allow = scipy.where(sigma_residual > -low_reject, 1, 0)
+            fig = figure()
+            ax = fig.add_subplot(131)
+            #ax.plot(spectrum.x, spectrum.y)
+            #ax.set_title(niterate)
+            ax.plot(spectrum.x, spectrum.y)
+            ax.plot(spectrum.x, continuum, 'k', linewidth=2.0)
+
+
+            
+            plt.draw()
+            
+            ax = fig.add_subplot(133)
+            ax.plot(spectrum.x, normalised)
+            
+            
+            plt.draw()
+            ax = fig.add_subplot(132)
+            ax.plot(spectrum.x, sigma_residual)
+            
+
+
+            allowed = np.zeros(len(spectrum.x))
+            for i, val in enumerate(sigma_residual):
+                
+                if high_reject > val and val > -low_reject:
+                    #print high_reject, val, -low_reject, 1
+                    allowed[i] = 1
+                elif val == 99.:
+                    allowed[i] = 99
+                else:
+                    #print high_reject, val, -low_reject, 0
+                    allowed[i] = 0
+                    
+            #allowed = np.array(allowed)
+            #print sum(allowed)
+            i = 0
+            while (len(allowed) > i):
+                #print i
+                if allowed[i] == 0:
+                    rs = np.max([0, i-grow])
+                    re = np.min([len(allowed)-1, i+grow])
+                    #print i, 'caught', rs, re, allowed[rs:re+1]
+                    i += grow
+                    allowed[rs:re] = np.zeros(re-rs)
+                elif allowed[i] == 99:
+                    allowed[i] = 0
+                i += 1
+
+            print 'sum', sum(allowed) 
+
+            
+            in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
+            
+            continuum_regions = []
+            for i, is_continuum in enumerate(allowed):
+                          
+                                
+                if is_continuum and not in_continuum: # Continuum region starts
+                    region_start, in_continuum = spectrum.wavelength[i], True
+                    
+                    
+                elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
+                    region_end, in_continuum = spectrum.wavelength[i-1], False
+                    continuum_regions.append((region_start, region_end))
+    
+            
+            for continuum_region in continuum_regions:
+                print continuum_region
+                continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), (low_reject + high_reject), facecolor='#cccccc', alpha=0.5)
+                ax.add_patch(continuum_patch)
+                plt.draw()
+                #raise
+                
+
+            """
+
+
+            
+            #allowed = high_allow * low_allow.T
+            #allowed = scipy.where(scipy.where(high_reject > sigma_residual, sigma_residual, -(low_reject + 1)) > -low_reject, 1, 0)
+
+            #raise
+            
+            # We ought to grow out the ones that are zero
+            #print max(low_allow)
+            #raise
+            #rejected = scipy.where(low_allow == 0.0, 1, 0)
+
+
+            
+            
+
+            #print niterate
+            
+            #raise
+            #figure()
+            #plot(spectrum.x, spectrum.y)
+            #plot(spectrum.x, continuum)
+            
+            #return
+
+
+        
+        """
+        in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
+        
+        continuum_regions = []
+        for i, is_continuum in enumerate(allowed):
+                            
+            if is_continuum and not in_continuum: # Continuum region starts
+                region_start, in_continuum = spectrum.wavelength[i], True
+                
+            elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
+                region_end, in_continuum = spectrum.wavelength[i-1], False
+                continuum_regions.append((region_start, region_end))
+
+        import matplotlib.pyplot as plt        
+        fig = plt.figure()
+
+        ax = fig.add_subplot(111)
+        from matplotlib.patches import Rectangle
+        ax.plot(spectrum.x, sigma_residual)
+        for continuum_region in continuum_regions:
+            
+            continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), high_reject + low_reject, facecolor='#cccccc', alpha=0.5)
+            ax.add_patch(continuum_patch)
+                
+        plt.draw()
+        
+        
+        #return (high_allow, low_allow, rejected)
+        
+        continuum_indices = scipy.nonzero(low_allow)
+        """
+        normalised = spectrum.y / continuum
+        fig = figure()
+        ax = fig.add_subplot(111)
+        ax.plot(spectrum.x, normalised)
+        plt.draw()
+        raise
+        
+        
+    else:
+        raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
 
 
