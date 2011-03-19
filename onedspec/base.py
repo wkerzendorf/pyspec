@@ -8,7 +8,7 @@ import pdb
 import pyfits
 
 debug = True
-num_precission = 1e-14
+num_precission = 1e-6
 
 def spec_operation(func):
     def convert_operands(self, operand):
@@ -23,29 +23,73 @@ def spec_operation(func):
                                  "%s != %s" % (self.op_mode, operand.op_mode))
             
             else:
-                coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
-                coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
+
                 
                 resSelf = np.mean(np.diff(self.wavelength))
                 resOperand = np.mean(np.diff(operand.wavelength))
+
                 #Checking if spectral wavelength grids are the same
                 #that makes operations easy as they can just act on the np arrays
                 if  self.wavelength.shape[0] == operand.wavelength.shape[0] and \
                     np.mean(np.abs(self.wavelength - operand.wavelength)) < num_precission:
+                    
                     return func(self, operand.y)
                     
                 #Checking if the spectral wavelength grids are the same on an overlaping grid
-                elif self[coMin:coMax].wavelength.shape[0] == \
-                    operand[coMin:coMax].wavelength.shape[0] and \
-                    np.mean(np.abs(self[coMin:coMax].wavelength - operand[coMin:coMax].wavelength)) < num_precission:
-                    return func(self[coMin:coMax], operand[coMin:coMax].y)
+                elif self.wavelength.shape[0] == \
+                    operand.wavelength.shape[0] and \
+                    np.mean(np.abs(self.wavelength - operand.wavelength)) < num_precission:
                     
+                    return func(self, operand.y)
+                
                 #Checking which resolution is lower and interpolating onto that grid
                 elif self.op_mode == "on_resolution":
+                    
+                    coMin = np.max((operand.wavelength.min(), self.wavelength.min()))
+                    coMax = np.min((operand.wavelength.max(), self.wavelength.max()))
+                    
+                    operand_bound = operand[coMin:coMax]
+                    self_bound = self[coMin:coMax]
+                    
+                    # Check the edges
+                    union_end = False
+                    union_start = False
+                    
+                    if operand_bound.x[0] > self_bound.x[0]:
+                        operand_bound.data = operand_bound.data[1::]
+                        union_start = operand.interpolate(self_bound.x[0]).data
+                        
+                    elif self_bound.x[0] > operand_bound.x[0]:
+                        self_bound.data = self_bound.data[1::]
+                        union_start = self.interpolate(operand_bound.x[0]).data
+                    
+                    if self.x[-1] > operand_bound.x[-1]:
+                        self_bound.data = self_bound.data[:-1:]
+                        union_end = self.interpolate(operand_bound.x[-1]).data
+                        
+                    elif operand.x[-1] > self_bound.x[-1]:
+                        operand_bound.data = operand_bound.data[:-1:]
+                        union_end = operand.interpolate(self_bound.x[-1]).data
+
+                    
                     if resSelf > resOperand:
-                        return func(self, operand.interpolate(self.wavelength).y)
+                        u_x = self_bound
+                        
+                        if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
+                        if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
+                        
+                        u_y = operand.interpolate(u_x.x).y
+                        
                     else:
-                        return func(self.interpolate(operand.wavelength), operand.y)
+                        u_x = self.interpolate(operand_bound.x)
+                        
+                        if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
+                        if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
+                        
+                        u_y = operand[u_x.x[0]:u_x.x[-1]].y
+                        
+                        
+                    return func(u_x, u_y)
                 else:
                     raise NotImplementedError("Operation mode %s not implemented")
                 
@@ -82,7 +126,7 @@ class onedspec(object):
     """
     
     def __repr__(self):
-        return r'<onedspec object over [%3.1f to %3.1f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
+        return r'<onedspec object over [%3.5f to %3.5f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
     
     @classmethod
     def from_ascii(cls, filename, **kwargs):
@@ -201,24 +245,23 @@ class onedspec(object):
 
         
     def __getitem__(self, index):
-        
+
         if isinstance(index, float):
             
             new_index = self.wavelength.searchsorted(index)
-
             return self.flux[new_index]
             
         elif isinstance(index, slice):
             start, stop, step = index.start, index.stop, index.step
 
             if isinstance(index.start, float):
-                    start = self.wavelength.searchsorted(index.start)
+                start = self.wavelength.searchsorted(index.start)
                     
             if isinstance(index.stop, float):
-                    stop = self.wavelength.searchsorted(index.stop)
-                    
-            #return [self.wavelength[slice(start,stop,step)], self.flux[slice(start,stop,step)]]
-            return onedspec(self.data[slice(start,stop)], type='ndarray')
+                stop = self.wavelength.searchsorted(index.stop)
+                if len(self.x) > stop: stop += 1
+            
+            return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
         else:
             return self.data[index]
@@ -228,59 +271,54 @@ class onedspec(object):
         Interpolate your spectrum on the reference wavelength grid.
         
         """
+
         if mode == 'linear':
             f = interpolate.interp1d(self.wavelength, self.flux, kind='linear', copy=False)
-            return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
+            if isinstance(wl_reference, float):
+                return self.__class__(np.array([wl_reference, f(wl_reference)]), type='ndarray')
+            else:
+                return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
         else:
-            return NotImplementedError()
+            return NotImplementedError('Non-linear interpolation not implemented yet.')
 
 
     @spec_operation
     def __add__(self, operand):
-        """
         
-        Adds two spectra together, or adds finite real numbers across an entire
-        spectrum.
-        
-        """
+        """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
         return self.__class__(self.wavelength, self.flux + operand, type='waveflux')
         
 
     @spec_operation
     def __sub__(self, operand):
-        """
         
-        Adds two spectra together, or adds finite real numbers across an entire
-        spectrum.
-        
-        """
+        """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
         return self.__class__(self.wavelength, self.flux + operand, type='waveflux')
         
 
     @spec_operation
     def __mul__(self, operand):
-        """
         
-        Adds two spectra together, or adds finite real numbers across an entire
-        spectrum.
-        
-        """
+        """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
         return self.__class__(self.wavelength, self.flux * operand, type='waveflux')
         
 
     @spec_operation
     def __div__(self, operand):
-        """
         
-        Adds two spectra together, or adds finite real numbers across an entire
-        spectrum.
-        
-        """
+        """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
         return self.__class__(self.wavelength, self.flux / operand, type='waveflux')
+        
+    @spec_operation
+    def __pow__(self, operand):
+        
+        """Performs power operations on spectra."""
+        
+        return self.__class__(self.wavelength, self.flux ** operand, type='waveflux')
         
 
     # Mirror functions
@@ -296,6 +334,9 @@ class onedspec(object):
             
     def __rdiv__(self, spectrum, **kwargs):
         return self.__div__(spectrum, **kwargs)
+    
+    def __rpow__(self, spectrum, **kwargs):
+        return self.__pow__(spectrum, **kwargs)
     
     def add_noise(self, reqS2N, assumS2N=np.inf):
         #Adding noise to the spectrum. you can give it required noise and assumedNoise
