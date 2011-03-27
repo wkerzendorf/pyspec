@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy import interpolate
+from scipy import interpolate, ndimage
 import logging
 import sqlite3
 import cPickle as pickle
@@ -9,7 +9,7 @@ import pyfits
 
 debug = True
 num_precission = 1e-6
-
+c = 299792.458
 def spec_operation(func):
     def convert_operands(self, operand):
         """
@@ -126,7 +126,7 @@ class onedspec(object):
     """
     
     def __repr__(self):
-        return r'<onedspec object over [%3.5f to %3.5f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wavelength[0], self.wavelength[-1], np.min(self.flux), np.max(self.flux),)
+        return r'<onedspec object over [%3.5f to %3.5f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wave.min(), self.wave.max(), self.flux.min(), self.flux.max(),)
     
     @classmethod
     def from_ascii(cls, filename, **kwargs):
@@ -232,13 +232,8 @@ class onedspec(object):
     def getXY(self):
         return self.data[:, 0], self.data[:, 1]
     
-    x = property(getWavelength, setWavelength)
-    y = property(getFlux, setFlux)
-    
-    #adding similar nomenclature like in pysynphot
-    wavelength = x
-    wave = x
-    flux = y
+    wave = property(getWavelength, setWavelength)
+    flux = property(getFlux, setFlux)
     
     
     xy=property(getXY, setXY)
@@ -374,7 +369,63 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
-    
+    def convolve_rotation(self, vrot, beta=0.4):
+        """
+            Convolves the spectrum with a rotational kernel
+            vrot is given in km/s
+            beta is a limb-darkening factor (default=0.4)
+            
+        """
+        
+        smallDelta = np.diff(self.wave).min()
+        
+        maxWave = self.wave.max()
+        minWave = self.wave.min()
+        
+        bound = maxWave * (vrot / c)
+        
+        rotKernelX = (np.arange(maxWave - bound, maxWave + bound, smallDelta) - maxWave) / bound
+        
+        rotKernel = ((2/np.pi) * np.sqrt(1-rotKernelX**2) + (beta/2) * (1-rotKernelX**2)) / (1+(2*beta)/3)
+        
+        rotKernel /= np.sum(rotKernel)
+        logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
+        
+        f = interpolate.splrep(self.wave, self.flux, k=1)
+        
+        logSpec = interpolate.splev(logWave, f)
+        
+        rotLogSpec = ndimage.convolve1d(logSpec, rotKernel, mode='nearest')
+        
+        f = interpolate.splrep(logWave, rotLogSpec, k=1)
+        
+        return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
+        
+    def convolve_profile(self, R, initialR = np.inf):
+        """
+            Smooth to given resolution
+            * R = resolution to smooth to
+            * initial R = 
+        """
+        smallDelta = np.diff(self.wave).min()
+        
+        maxWave = self.wave.max()
+        minWave = self.wave.min()
+        smoothFWHM = np.sqrt((maxWave/R)**2 - (maxWave/initialR)**2)
+        smoothSigma = (smoothFWHM/(2*np.sqrt(2*np.log(2))))/smallDelta
+        
+        logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
+        
+        f = interpolate.splrep(self.wave, self.flux, k=1)
+        
+        logSpec = interpolate.splev(logWave, f)
+        smoothLogSpec = ndimage.gaussian_filter1d(logSpec, smoothSigma)
+        
+        f = interpolate.splrep(logWave, smoothLogSpec, k=1)
+        
+        return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
+        
+        
     def to_ascii(self, filename):
         pass
     

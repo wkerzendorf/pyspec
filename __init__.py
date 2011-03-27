@@ -1,1 +1,3 @@
-from onedspec.base import onedspec
+import oned
+
+from oned import onedspec
