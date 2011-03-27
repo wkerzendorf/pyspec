@@ -379,7 +379,21 @@ class onedspec(object):
         pass
     
     def to_fits(self, filename):
-        pass
+        crval1 = self.wave.min()
+        crpix1 = 1
+        #checking for uniformness
+        cdelt1 = np.mean(np.diff(self.wave))
+        testWave = np.arange(crval1, self.wave.max()+cdelt1, cdelt1, dtype=self.wave.dtype)
+        if np.max(testWave-self.wave) > num_precission:
+            raise ValueError("Spectrum not on a uniform grid (error %s), cannot save to fits" % np.max(testWave-self.wave))
+        
+        primaryHDU = pyfits.PrimaryHDU(self.flux)
+        
+        primaryHDU.header.update('CRVAL1', crval1)
+        primaryHDU.header.update('CRPIX1', crpix1)
+        primaryHDU.header.update('CDELT1', cdelt1)
+        primaryHDU.writeto(filename, clobber=True)
+    
     
     def __conform__(self):
         """
