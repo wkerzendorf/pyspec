@@ -1,7 +1,11 @@
-#from onedspec import onedspec
+from base import onedspec
+
 import numpy as np
 import scipy
 import scipy.optimize
+#from matplotlib.pyplot import *
+import matplotlib.pyplot as plt
+
 
 def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     """
@@ -50,9 +54,9 @@ def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
             if grad[i-1] > 0 and grad[i+1] < 0 and sigma[i] > peak_tol: # todo - allow sigma to be set
                 
                 if len(arc_line_peaks) > 0:
-                    if min(abs(np.array(arc_line_peaks) - arc_spectrum.wavelength[i])) > peak_tol:
-                        arc_line_peaks.append(arc_spectrum.wavelength[i])  
-                else: arc_line_peaks.append(arc_spectrum.wavelength[i])
+                    if min(abs(np.array(arc_line_peaks) - arc_spectrum.wave[i])) > peak_tol:
+                        arc_line_peaks.append(arc_spectrum.wave[i])  
+                else: arc_line_peaks.append(arc_spectrum.wave[i])
                 
 
         
@@ -60,12 +64,12 @@ def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     else: arc_line_peaks = arc_lines
     
     profiles = fitprofs(arc_spectrum, arc_line_peaks, peak_tol) 
-    fitted_arc = onedspec(arc_spectrum.wavelength, np.zeros(len(arc_spectrum.wavelength)), type='waveflux')
+    fitted_arc = onedspec(arc_spectrum.wave, np.zeros(len(arc_spectrum.wave)), type='waveflux')
     
     fitfunc = lambda p, x: p[0] * scipy.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
     for profile in profiles:
         
-        fitted_arcline = onedspec(fitted_arc.x, fitfunc(profile, fitted_arc.x), type='waveflux')
+        fitted_arcline = onedspec(fitted_arc.wave, fitfunc(profile, fitted_arc.wave), type='waveflux')
         #todo - doing fitted_arc += gave an unsupported operand error
         fitted_arc += fitted_arcline
         
@@ -127,10 +131,12 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         
         # Minimum wavelength space
         m2 = np.zeros(len(m1))
-        m2[0:-1] = scipy.where(np.diff(synthetic.wavelength) < kwargs['continuum_min_diff'], 1, 0)
+        m2[0:-1] = scipy.where(np.diff(synthetic.wave) < kwargs['continuum_min_diff'], 1, 0)
         m2[-1] = 0
         
         m = m1 * np.transpose(m2)
+        
+        return onedspec(synthetic.wave, m, type='waveflux')
         
         
         in_continuum, region_start, wavelength_points = (False, 0, len(m))
@@ -138,10 +144,10 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         for i, is_continuum in enumerate(m):
             
             if is_continuum and not in_continuum: # Continuum region starts
-                region_start, in_continuum = synthetic.wavelength[i], True
+                region_start, in_continuum = synthetic.wave[i], True
                 
             elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
-                region_end, in_continuum = synthetic.wavelength[i-1], False
+                region_end, in_continuum = synthetic.wave[i-1], False
                 continuum_regions.append((region_start, region_end))
                 
   
@@ -225,9 +231,9 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         
         peak = max(peak_spectrum.flux)
         index = scipy.where(peak_spectrum.flux==peak)[0][0]
-        position = peak_spectrum.wavelength[index]
+        position = peak_spectrum.wave[index]
         
-        index = spectrum.wavelength.searchsorted(position)
+        index = spectrum.wave.searchsorted(position)
         
         
         p, m = 0, 0
@@ -243,7 +249,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         errfunc = lambda p, x, y: fitfunc(p, x) - y
         
         p0 = scipy.c_[peak, position, 5]
-        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[index - m:p + index].wavelength, spectrum[index - m:p + index].flux))
+        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[index - m:p + index].wave, spectrum[index - m:p + index].flux))
         
         profiles.append(tuple(p1))
         
@@ -251,5 +257,130 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         return profiles[0]
     
     return profiles
+
+
+def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1., niterate=2, grow=1., **kwargs):
+
+    """
+    
+    A one dimensional spectrum is fit to the continuum of the spectra provided. The
+    resulting spectrum is the original spectrum which has been flux normalised. The
+    fitted function may be a legendre polynomial, chebyshev polynomial, spline, or
+    a beizer spline.
+    
+    Inputs
+    ------
+    
+    spectrum    :   Spectrum to be continuum normalised. This must be a onedspec
+                    class.
+                    
+    function    :   The function type to fit to the continuum. The available options
+                    are 'legendre' polynomial, 'chebyshev' polynomial, a 'spline' or
+                    a 'biezer' spline.
+                    
+    order       :   The order of the fitting polynomial or spline.
+    
+    low_reject  :   Rejection limit below the continuum fit in units of the residual
+                    sigma.
+                    
+    high_reject :   Rejection limit above the continuum fit in units of the residual
+                    sigma.
+    
+    niterate    :   Maximum number of rejection iterations.
+    
+    grow        :   There are two types of input for this argument. If an integer is
+                    supplied, then when a pixel range is rejected pixels within this
+                    distance are also rejected. If a float is specified then a line
+                    will try to be fitted to the rejection region. If the region is
+                    well characterised by a fitted profile, then the number of sigma
+                    specified by the grow float on either side will be rejected. If
+                    no profile is fitted, then the number of pixels on either side
+                    will be rejected.
+    
+    """
+
+    # Input checks
+    
+    functions = ['legendre', 'chebyshev', 'spline', 'biezer']
+    
+    if function not in functions:
+        raise ValueError('Unknown continuum function type specified (%s). Available function types are: %s' % (function, ', '.join(functions), ))
+    
+    try: order = int(order)
+    except ValueError: raise TypeError('Invalid input for profile order; \'%s\'. Order must be an integer-type.' % (order, ))
+    
+    try: low_reject = float(low_reject)
+    except ValueError: raise TypeError('Invalid input for lower rejection limit; \'%s\'. Rejection limit must be a float-type.' % (low_reject, ))
+    
+    try: high_reject = float(high_reject)
+    except ValueError: raise TypeError('Invalid input for higher rejection limit; \'%s\'. Rejection limit must be a float-type.' % (high_reject, ))
+    
+    try: niterate = int(niterate)
+    except ValueError: raise TypeError('Invalid input for maximum interation number; \'%s\'. Maximum iteration number must be an integer-type.' % (niterate, ))
+    
+    if type(grow) not in [float, int]:
+        raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
+    
+    
+    sample = len(spectrum.wave) + 1
+    positions, values = spectrum.wave, spectrum.flux
+    
+    while (niterate > 0) and (sample > len(positions)):
+        
+        sample = len(positions)
+    
+        if function == 'legendre':
+            
+            coeffs = scipy.polyfit(positions, values, order)
+            continuum = scipy.polyval(coeffs, spectrum.wave)
+           
+        elif function == 'biezer':
+            
+            if kwargs.has_key('knots'):
+                knots = kwargs['knots']
+            else:
+                if kwargs.has_key('bp'): bp = kwargs['bp']
+                else: bp = 50.
+                
+                knots = np.arange((int(positions[0] / bp) + 1) * bp, int(positions[-1] / bp) * bp, bp)
+            
+            spline = scipy.interpolate.splrep(positions, values, t=knots)
+            continuum = scipy.interpolate.splev(spectrum.wave, spline)
+            
+        elif function == 'spline':
+            
+            spline = scipy.interpolate.splrep(positions, values, task=0, s=0.5)
+            continuum = scipy.interpolate.splev(spectrum.wave, spline)
+              
+        else:
+            raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
+
+            
+        residual = spectrum.flux - continuum
+        sigma = np.std(residual)
+        
+        sigma_residual = residual/sigma
+
+        allowed_low = scipy.where(low_reject > sigma_residual, 1, 0)
+        allowed_high = scipy.where(sigma_residual > -high_reject, 1, 0)
+        
+        allowed = allowed_low * allowed_high.T
+        
+        i, n = 0, len(allowed)
+        while n > i:
+            if not allowed[i]:
+                rs, re = np.max([0, i-grow]), np.min([n-1, i+grow+1])
+                allowed[rs:re] = np.zeros(re-rs)
+                i += grow
+            i += 1
+    
+    
+        positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
+        niterate -= 1
+        
+    return onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux')
+    
+        
+        
 
 
