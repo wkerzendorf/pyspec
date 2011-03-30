@@ -3,7 +3,7 @@ from base import onedspec
 import numpy as np
 import scipy
 import scipy.optimize
-from matplotlib.pyplot import *
+#from matplotlib.pyplot import *
 import matplotlib.pyplot as plt
 
 
@@ -259,8 +259,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
     return profiles
 
 
-def normalise(spectrum, function='spline', order=3, low_reject=3., high_reject=1.,
-              niterate=2, grow=1., **kwargs):
+def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1., niterate=2, grow=1., **kwargs):
 
     """
     
@@ -323,17 +322,17 @@ def normalise(spectrum, function='spline', order=3, low_reject=3., high_reject=1
         raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
     
-    sample = len(spectrum.x) + 1
-    positions, values = spectrum.x, spectrum.y
+    sample = len(spectrum.wave) + 1
+    positions, values = spectrum.wave, spectrum.flux
     
-    while (niterate > 0):# and (sample > len(positions)):
+    while (niterate > 0) and (sample > len(positions)):
         
         sample = len(positions)
     
         if function == 'legendre':
             
             coeffs = scipy.polyfit(positions, values, order)
-            continuum = scipy.polyval(coeffs, spectrum.x)
+            continuum = scipy.polyval(coeffs, spectrum.wave)
            
         elif function == 'biezer':
             
@@ -346,18 +345,18 @@ def normalise(spectrum, function='spline', order=3, low_reject=3., high_reject=1
                 knots = np.arange((int(positions[0] / bp) + 1) * bp, int(positions[-1] / bp) * bp, bp)
             
             spline = scipy.interpolate.splrep(positions, values, t=knots)
-            continuum = scipy.interpolate.splev(spectrum.x, spline)
+            continuum = scipy.interpolate.splev(spectrum.wave, spline)
             
         elif function == 'spline':
             
             spline = scipy.interpolate.splrep(positions, values, task=0, s=0.5)
-            continuum = scipy.interpolate.splev(spectrum.x, spline)
+            continuum = scipy.interpolate.splev(spectrum.wave, spline)
               
         else:
             raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
 
             
-        residual = spectrum.y - continuum
+        residual = spectrum.flux - continuum
         sigma = np.std(residual)
         
         sigma_residual = residual/sigma
@@ -379,18 +378,7 @@ def normalise(spectrum, function='spline', order=3, low_reject=3., high_reject=1
         positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
         niterate -= 1
         
-    normalised = spectrum.y / continuum
-    
-    raise
-    #fig = figure()
-    #ax = fig.add_subplot(121)
-    #ax.plot(spectrum.x, spectrum.y)
-    #ax.plot(spectrum.x, continuum, 'k', linewidth=3)
-    #ax = fig.add_subplot(122)
-    #ax.plot(spectrum.x, normalised)
-    
-    plt.draw()
-    return normalised
+    return onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux')
     
         
         
