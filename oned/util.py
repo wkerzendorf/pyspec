@@ -259,8 +259,8 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
     return profiles
 
 
-def normalise(spectrum, function='legendre', order=3, low_reject=0.5, high_reject=2.0,
-              niterate=10, grow=1.):
+def normalise(spectrum, function='spline', order=3, low_reject=3., high_reject=1.,
+              niterate=2, grow=1., **kwargs):
 
     """
     
@@ -323,255 +323,76 @@ def normalise(spectrum, function='legendre', order=3, low_reject=0.5, high_rejec
         raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
     
-    from matplotlib.patches import Rectangle
+    sample = len(spectrum.x) + 1
+    positions, values = spectrum.x, spectrum.y
     
-    if function == 'legendre':
-
-        sample = len(spectrum.x) + 1
-        positions, values = spectrum.x, spectrum.y
+    while (niterate > 0):# and (sample > len(positions)):
         
-        while (niterate > 0) and (sample > len(positions)):
-            
-            sample = len(positions)
-            print "len of positions and values", len(positions), len(values)
-            coeffs = scipy.polyfit(positions, values, order)
-            #continuum = scipy.polyval(coeffs, positions)
-            continuum = scipy.polyval(coeffs, spectrum.x)
-            
-            residual = spectrum.y - continuum
-            sigma = np.std(residual)
-            
-            sigma_residual = residual/sigma
-            
-            fig = figure()
-            ax = fig.add_subplot(131)
-            
-            ax.plot(spectrum.x, spectrum.y)
-            ax.plot(spectrum.x, continuum, 'k', linewidth=2.0)
-            
-            ax = fig.add_subplot(132)
-            ax.plot(spectrum.x, sigma_residual)
-        
-            allowed = np.zeros(len(spectrum.x))
-            for i, val in enumerate(sigma_residual):
-                if high_reject > val and val > -low_reject:
-                    allowed[i] = 1
-                else:
-                    allowed[i] = 0
-                
-            print 'max allowed', max(allowed)
-
-            """
-            i = 0
-            while (len(allowed) > i):
-                if allowed[i] == 0:
-                    rs = np.max([0, i-grow])
-                    re = np.min([len(allowed)-1, i+grow])
-
-                    i += grow
-                    allowed[rs:re] = np.zeros(re-rs)
-                elif allowed[i] == 99:
-                    allowed[i] = 0
-                i += 1
-            """
-            
-            
-            in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
-            
-            continuum_regions = []
-            for i, is_continuum in enumerate(allowed):
-                          
-                                
-                if is_continuum and not in_continuum: # Continuum region starts
-                    region_start, in_continuum = spectrum.wavelength[i], True
-                    
-                    
-                elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
-                    region_end, in_continuum = spectrum.wavelength[i-1], False
-                    
-                    if (region_end - region_start) > 1.:
-                        continuum_regions.append((region_start, region_end))
+        sample = len(positions)
     
+        if function == 'legendre':
             
-            for continuum_region in continuum_regions:
-
-                continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), (low_reject + high_reject), facecolor='#cccccc', alpha=0.5)
-                ax.add_patch(continuum_patch)
-                plt.draw()
-                
-        
-            positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
-            niterate -= 1
-        
-        """
-        positions, values = spectrum.x, spectrum.y
-         
-        close('all')
-        sample = len(positions) + 1
-        allowed = np.ones(len(spectrum.x))
-        while (niterate > 0):# and (sample > len(positions)):
-            sample = len(positions)
             coeffs = scipy.polyfit(positions, values, order)
             continuum = scipy.polyval(coeffs, spectrum.x)
+           
+        elif function == 'biezer':
             
-            # Determine the high/low rejections
-            
-            residual = spectrum.y - continuum
-            sigma = np.std(residual)
-            print 'sigma', sigma
-            
-            
-            #sigma_residual = residual/sigma
-
-            sigma_residual = scipy.where(allowed > 0, residual/sigma, 99)
-            normalised = spectrum.y / continuum
-            
-            
-            #high_allow = scipy.where(sigma_residual > high_reject, 1, 0)
-            #low_allow = scipy.where(sigma_residual > -low_reject, 1, 0)
-            fig = figure()
-            ax = fig.add_subplot(131)
-            #ax.plot(spectrum.x, spectrum.y)
-            #ax.set_title(niterate)
-            ax.plot(spectrum.x, spectrum.y)
-            ax.plot(spectrum.x, continuum, 'k', linewidth=2.0)
-
-
-            
-            plt.draw()
-            
-            ax = fig.add_subplot(133)
-            ax.plot(spectrum.x, normalised)
-            
-            
-            plt.draw()
-            ax = fig.add_subplot(132)
-            ax.plot(spectrum.x, sigma_residual)
-            
-
-
-            allowed = np.zeros(len(spectrum.x))
-            for i, val in enumerate(sigma_residual):
+            if kwargs.has_key('knots'):
+                knots = kwargs['knots']
+            else:
+                if kwargs.has_key('bp'): bp = kwargs['bp']
+                else: bp = 50.
                 
-                if high_reject > val and val > -low_reject:
-                    #print high_reject, val, -low_reject, 1
-                    allowed[i] = 1
-                elif val == 99.:
-                    allowed[i] = 99
-                else:
-                    #print high_reject, val, -low_reject, 0
-                    allowed[i] = 0
-                    
-            #allowed = np.array(allowed)
-            #print sum(allowed)
-            i = 0
-            while (len(allowed) > i):
-                #print i
-                if allowed[i] == 0:
-                    rs = np.max([0, i-grow])
-                    re = np.min([len(allowed)-1, i+grow])
-                    #print i, 'caught', rs, re, allowed[rs:re+1]
-                    i += grow
-                    allowed[rs:re] = np.zeros(re-rs)
-                elif allowed[i] == 99:
-                    allowed[i] = 0
-                i += 1
-
-            print 'sum', sum(allowed) 
+                knots = np.arange((int(positions[0] / bp) + 1) * bp, int(positions[-1] / bp) * bp, bp)
+            
+            spline = scipy.interpolate.splrep(positions, values, t=knots)
+            continuum = scipy.interpolate.splev(spectrum.x, spline)
+            
+        elif function == 'spline':
+            
+            spline = scipy.interpolate.splrep(positions, values, task=0, s=0.5)
+            continuum = scipy.interpolate.splev(spectrum.x, spline)
+              
+        else:
+            raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
 
             
-            in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
-            
-            continuum_regions = []
-            for i, is_continuum in enumerate(allowed):
-                          
-                                
-                if is_continuum and not in_continuum: # Continuum region starts
-                    region_start, in_continuum = spectrum.wavelength[i], True
-                    
-                    
-                elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
-                    region_end, in_continuum = spectrum.wavelength[i-1], False
-                    continuum_regions.append((region_start, region_end))
+        residual = spectrum.y - continuum
+        sigma = np.std(residual)
+        
+        sigma_residual = residual/sigma
+
+        allowed_low = scipy.where(low_reject > sigma_residual, 1, 0)
+        allowed_high = scipy.where(sigma_residual > -high_reject, 1, 0)
+        
+        allowed = allowed_low * allowed_high.T
+        
+        i, n = 0, len(allowed)
+        while n > i:
+            if not allowed[i]:
+                rs, re = np.max([0, i-grow]), np.min([n-1, i+grow+1])
+                allowed[rs:re] = np.zeros(re-rs)
+                i += grow
+            i += 1
     
-            
-            for continuum_region in continuum_regions:
-                print continuum_region
-                continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), (low_reject + high_reject), facecolor='#cccccc', alpha=0.5)
-                ax.add_patch(continuum_patch)
-                plt.draw()
-                #raise
-                
-
-            """
-
-
-            
-            #allowed = high_allow * low_allow.T
-            #allowed = scipy.where(scipy.where(high_reject > sigma_residual, sigma_residual, -(low_reject + 1)) > -low_reject, 1, 0)
-
-            #raise
-            
-            # We ought to grow out the ones that are zero
-            #print max(low_allow)
-            #raise
-            #rejected = scipy.where(low_allow == 0.0, 1, 0)
-
-
-            
-            
-
-            #print niterate
-            
-            #raise
-            #figure()
-            #plot(spectrum.x, spectrum.y)
-            #plot(spectrum.x, continuum)
-            
-            #return
-
-
+    
+        positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
+        niterate -= 1
         
-        """
-        in_continuum, region_start, wavelength_points = (False, 0, len(allowed))
-        
-        continuum_regions = []
-        for i, is_continuum in enumerate(allowed):
-                            
-            if is_continuum and not in_continuum: # Continuum region starts
-                region_start, in_continuum = spectrum.wavelength[i], True
-                
-            elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
-                region_end, in_continuum = spectrum.wavelength[i-1], False
-                continuum_regions.append((region_start, region_end))
-
-        import matplotlib.pyplot as plt        
-        fig = plt.figure()
-
-        ax = fig.add_subplot(111)
-        from matplotlib.patches import Rectangle
-        ax.plot(spectrum.x, sigma_residual)
-        for continuum_region in continuum_regions:
-            
-            continuum_patch = Rectangle((continuum_region[0], -low_reject), np.diff(continuum_region), high_reject + low_reject, facecolor='#cccccc', alpha=0.5)
-            ax.add_patch(continuum_patch)
-                
-        plt.draw()
+    normalised = spectrum.y / continuum
+    
+    raise
+    #fig = figure()
+    #ax = fig.add_subplot(121)
+    #ax.plot(spectrum.x, spectrum.y)
+    #ax.plot(spectrum.x, continuum, 'k', linewidth=3)
+    #ax = fig.add_subplot(122)
+    #ax.plot(spectrum.x, normalised)
+    
+    plt.draw()
+    return normalised
+    
         
         
-        #return (high_allow, low_allow, rejected)
-        
-        continuum_indices = scipy.nonzero(low_allow)
-        """
-        normalised = spectrum.y / continuum
-        fig = figure()
-        ax = fig.add_subplot(111)
-        ax.plot(spectrum.x, normalised)
-        plt.draw()
-        raise
-        
-        
-    else:
-        raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
 
 
