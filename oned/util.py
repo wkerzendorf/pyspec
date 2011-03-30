@@ -54,9 +54,9 @@ def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
             if grad[i-1] > 0 and grad[i+1] < 0 and sigma[i] > peak_tol: # todo - allow sigma to be set
                 
                 if len(arc_line_peaks) > 0:
-                    if min(abs(np.array(arc_line_peaks) - arc_spectrum.wavelength[i])) > peak_tol:
-                        arc_line_peaks.append(arc_spectrum.wavelength[i])  
-                else: arc_line_peaks.append(arc_spectrum.wavelength[i])
+                    if min(abs(np.array(arc_line_peaks) - arc_spectrum.wave[i])) > peak_tol:
+                        arc_line_peaks.append(arc_spectrum.wave[i])  
+                else: arc_line_peaks.append(arc_spectrum.wave[i])
                 
 
         
@@ -64,12 +64,12 @@ def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     else: arc_line_peaks = arc_lines
     
     profiles = fitprofs(arc_spectrum, arc_line_peaks, peak_tol) 
-    fitted_arc = onedspec(arc_spectrum.wavelength, np.zeros(len(arc_spectrum.wavelength)), type='waveflux')
+    fitted_arc = onedspec(arc_spectrum.wave, np.zeros(len(arc_spectrum.wave)), type='waveflux')
     
     fitfunc = lambda p, x: p[0] * scipy.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
     for profile in profiles:
         
-        fitted_arcline = onedspec(fitted_arc.x, fitfunc(profile, fitted_arc.x), type='waveflux')
+        fitted_arcline = onedspec(fitted_arc.wave, fitfunc(profile, fitted_arc.wave), type='waveflux')
         #todo - doing fitted_arc += gave an unsupported operand error
         fitted_arc += fitted_arcline
         
@@ -131,12 +131,12 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         
         # Minimum wavelength space
         m2 = np.zeros(len(m1))
-        m2[0:-1] = scipy.where(np.diff(synthetic.wavelength) < kwargs['continuum_min_diff'], 1, 0)
+        m2[0:-1] = scipy.where(np.diff(synthetic.wave) < kwargs['continuum_min_diff'], 1, 0)
         m2[-1] = 0
         
         m = m1 * np.transpose(m2)
         
-        return onedspec(synthetic.wavelength, m, type='waveflux')
+        return onedspec(synthetic.wave, m, type='waveflux')
         
         
         in_continuum, region_start, wavelength_points = (False, 0, len(m))
@@ -144,10 +144,10 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         for i, is_continuum in enumerate(m):
             
             if is_continuum and not in_continuum: # Continuum region starts
-                region_start, in_continuum = synthetic.wavelength[i], True
+                region_start, in_continuum = synthetic.wave[i], True
                 
             elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
-                region_end, in_continuum = synthetic.wavelength[i-1], False
+                region_end, in_continuum = synthetic.wave[i-1], False
                 continuum_regions.append((region_start, region_end))
                 
   
@@ -231,9 +231,9 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         
         peak = max(peak_spectrum.flux)
         index = scipy.where(peak_spectrum.flux==peak)[0][0]
-        position = peak_spectrum.wavelength[index]
+        position = peak_spectrum.wave[index]
         
-        index = spectrum.wavelength.searchsorted(position)
+        index = spectrum.wave.searchsorted(position)
         
         
         p, m = 0, 0
@@ -249,7 +249,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         errfunc = lambda p, x, y: fitfunc(p, x) - y
         
         p0 = scipy.c_[peak, position, 5]
-        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[index - m:p + index].wavelength, spectrum[index - m:p + index].flux))
+        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[index - m:p + index].wave, spectrum[index - m:p + index].flux))
         
         profiles.append(tuple(p1))
         

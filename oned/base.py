@@ -33,14 +33,14 @@ def spec_operation(func):
                 if  self.wave.shape[0] == operand.wave.shape[0] and \
                     np.mean(np.abs(self.wave - operand.wave)) < num_precission:
                     
-                    return func(self, operand.y)
+                    return func(self, operand.flux)
                     
                 #Checking if the spectral wave grids are the same on an overlaping grid
                 elif self.wave.shape[0] == \
                     operand.wave.shape[0] and \
                     np.mean(np.abs(self.wave - operand.wave)) < num_precission:
                     
-                    return func(self, operand.y)
+                    return func(self, operand.flux)
                 
                 #Checking which resolution is lower and interpolating onto that grid
                 elif self.op_mode == "on_resolution":
@@ -86,7 +86,7 @@ def spec_operation(func):
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         
-                        u_y = operand[u_x.x[0]:u_x.wave[-1]].flux
+                        u_y = operand[u_x.wave[0]:u_x.wave[-1]].flux
                         
                         
                     return func(u_x, u_y)
@@ -254,7 +254,7 @@ class onedspec(object):
                     
             if isinstance(index.stop, float):
                 stop = self.wave.searchsorted(index.stop)
-                if len(self.x) > stop: stop += 1
+                if len(self.wave) > stop: stop += 1
             
             return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
