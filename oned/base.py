@@ -369,15 +369,15 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
-    def convolve_rotation(self, vrot, beta=0.4):
+    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None):
         """
             Convolves the spectrum with a rotational kernel
             vrot is given in km/s
             beta is a limb-darkening factor (default=0.4)
-            
+            smallDelta is the wavlength delta that will be used when interpolating
         """
-        
-        smallDelta = np.diff(self.wave).min()
+        if smallDelta == None:
+            smallDelta = np.diff(self.wave).min()
         
         maxWave = self.wave.max()
         minWave = self.wave.min()
@@ -401,13 +401,15 @@ class onedspec(object):
         
         return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
         
-    def convolve_profile(self, R, initialR = np.inf):
+    def convolve_profile(self, R, initialR = np.inf, smallDelta=None):
         """
             Smooth to given resolution
             * R = resolution to smooth to
-            * initial R = 
+            * initial R =
+            smallDelta is the wavlength delta that will be used when interpolating
         """
-        smallDelta = np.diff(self.wave).min()
+        if smallDelta == None:
+            smallDelta = np.diff(self.wave).min()
         
         maxWave = self.wave.max()
         minWave = self.wave.min()
