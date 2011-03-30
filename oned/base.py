@@ -446,13 +446,16 @@ class onedspec(object):
         primaryHDU.writeto(filename, clobber=True)
     
     
-    def __conform__(self):
+    def __conform__(self, protocol):
         """
             Function that will automatically return an sqlite binary.
             This makes it easy to store it in sqlite databases.
             Most of the time this is called in the background
         """
+
         if protocol is sqlite3.PrepareProtocol:
             return sqlite3.Binary(self.data.tostring())
+        else:
+            raise NotImplementedError('Conforming to protocol %s has not been implemented yet' % protocol)
         
             
