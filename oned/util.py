@@ -319,7 +319,7 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
     if type(grow) not in [float, int]:
         raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
-    if continuum_regions != None:
+    if continuum_regions != None and len(continuum_regions) > 0:
         if type(continuum_regions) not in (list, tuple, np.array):
             raise TypeError('Invalid type for continuum_regions provided. This must be a list-type of tuples demonstrating the start and end of continuum regions e.g. [(x1, x2), (x3, x4), ..., (xN, xN+1)]')
         else:
@@ -370,7 +370,7 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
                 for knot in knots:
                     try:
                         idx = positions.index(knot)
-                    except ValueError:
+                    except:
                         pass
                     else:
                         del positions[idx], values[idx]
