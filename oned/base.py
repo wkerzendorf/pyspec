@@ -155,7 +155,7 @@ class onedspec(object):
                 self.data = args[0]
             elif kwargs['type'] ==  'waveflux':
 
-                self.data = np.array(zip(args[0], args[1]))
+                self.data = np.vstack((args[0], args[1])).transpose()
         else:        
             #---- auto check-----
             # If only one argument is passed, it is likely a text file or an arra
@@ -385,7 +385,7 @@ class onedspec(object):
         bound = maxWave * (vrot / c)
         
         rotKernelX = (np.arange(maxWave - bound, maxWave + bound, smallDelta) - maxWave) / bound
-        
+        rotKernelX[rotKernelX**2>1] = 1.
         rotKernel = ((2/np.pi) * np.sqrt(1-rotKernelX**2) + (beta/2) * (1-rotKernelX**2)) / (1+(2*beta)/3)
         
         rotKernel /= np.sum(rotKernel)
