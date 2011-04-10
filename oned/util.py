@@ -3,8 +3,6 @@ from base import onedspec
 import numpy as np
 import scipy
 import scipy.optimize
-#from matplotlib.pyplot import *
-import matplotlib.pyplot as plt
 
 
 def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
@@ -259,7 +257,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
     return profiles
 
 
-def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1., niterate=2, grow=1., **kwargs):
+def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1., niterate=2, grow=1., continuum_regions=None, weights=None, **kwargs):
 
     """
     
@@ -321,9 +319,31 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
     if type(grow) not in [float, int]:
         raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
+    if continuum_regions != None and len(continuum_regions) > 0:
+        if type(continuum_regions) not in (list, tuple, np.array):
+            raise TypeError('Invalid type for continuum_regions provided. This must be a list-type of tuples demonstrating the start and end of continuum regions e.g. [(x1, x2), (x3, x4), ..., (xN, xN+1)]')
+        else:
+            try:
+                continuum_regions = [map(float, (a, b)) for (a, b) in continuum_regions]
+                
+            except TypeError, ValueError:
+                raise TypeError('Invalid type for continuum_regions provided. This must be a list-type of tuples demonstrating the start and end of continuum regions, which must be float-types.')
     
+        # Continuum regions specified are good, let's continue
+        
+        positions, values = [], []
+        for (start, end) in continuum_regions:
+            continuum_region = spectrum[start:end]
+            
+            # todo this could be faster/smarter/harder/better
+            
+            [positions.append(position) for position in continuum_region.wave]
+            [values.append(value) for value in continuum_region.flux]
+        
+    else: positions, values = spectrum.wave, spectrum.flux
+    
+    first_pass = True
     sample = len(spectrum.wave) + 1
-    positions, values = spectrum.wave, spectrum.flux
     
     while (niterate > 0) and (sample > len(positions)):
         
@@ -343,6 +363,19 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
                 else: bp = 50.
                 
                 knots = np.arange((int(positions[0] / bp) + 1) * bp, int(positions[-1] / bp) * bp, bp)
+            
+            if first_pass:
+                positions = list(positions)
+                values = list(values)
+                for knot in knots:
+                    try:
+                        idx = positions.index(knot)
+                    except:
+                        pass
+                    else:
+                        del positions[idx], values[idx]
+                
+                first_pass = False
             
             spline = scipy.interpolate.splrep(positions, values, t=knots)
             continuum = scipy.interpolate.splev(spectrum.wave, spline)
@@ -377,9 +410,27 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
     
         positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
         niterate -= 1
-        
-    return onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux')
+
+    continuum_regions = []
+    in_continuum, region_start, wavelength_points = (False, 0, len(continuum))
     
+    for i, is_continuum in enumerate(allowed):
+        
+        if is_continuum and not in_continuum: # Continuum region starts
+            region_start, in_continuum = spectrum.wave[i], True
+            
+        elif in_continuum and (not is_continuum or (wavelength_points == i + 1)): # Continuum region ends
+            region_end, in_continuum = spectrum.wave[i-1], False
+            continuum_regions.append((region_start, region_end))
+            
+    if in_continuum: # Continuum region is on the reddest edge
+        continuum_regions.append((region_start, spectrum.wave[-1]))
+    
+    
+    if function in ('biezer', 'spline'):
+        return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, spline)
+    else:
+        return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, coeffs)
         
         
 

@@ -47,37 +47,37 @@ def spec_operation(func):
                     
                     coMin = np.max((operand.wave.min(), self.wave.min()))
                     coMax = np.min((operand.wave.max(), self.wave.max()))
-                    
+
                     operand_bound = operand[coMin:coMax]
                     self_bound = self[coMin:coMax]
-                    
+
                     # Check the edges
                     union_end = False
                     union_start = False
                     
                     if operand_bound.wave[0] > self_bound.wave[0]:
+
                         operand_bound.data = operand_bound.data[1::]
                         union_start = operand.interpolate(self_bound.wave[0]).data
                         
                     elif self_bound.wave[0] > operand_bound.wave[0]:
-                        self_bound.data = self_bound.data[1::]
                         union_start = self.interpolate(operand_bound.wave[0]).data
                     
                     if self.wave[-1] > operand_bound.wave[-1]:
+
                         self_bound.data = self_bound.data[:-1:]
                         union_end = self.interpolate(operand_bound.wave[-1]).data
                         
                     elif operand.wave[-1] > self_bound.wave[-1]:
-                        operand_bound.data = operand_bound.data[:-1:]
                         union_end = operand.interpolate(self_bound.wave[-1]).data
 
                     
-                    if resSelf > resOperand:
+                    if resSelf < resOperand:
                         u_x = self_bound
                         
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
-                        
+                            
                         u_y = operand.interpolate(u_x.wave).flux
                         
                     else:
@@ -87,7 +87,6 @@ def spec_operation(func):
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         
                         u_y = operand[u_x.wave[0]:u_x.wave[-1]].flux
-                        
                         
                     return func(u_x, u_y)
                 else:
