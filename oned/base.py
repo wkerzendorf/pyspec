@@ -154,7 +154,7 @@ class onedspec(object):
                 self.data = args[0]
             elif kwargs['type'] ==  'waveflux':
 
-                self.data = np.array(zip(args[0], args[1]))
+                self.data = np.vstack((args[0], args[1])).transpose()
         else:        
             #---- auto check-----
             # If only one argument is passed, it is likely a text file or an arra
@@ -368,15 +368,15 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
-    def convolve_rotation(self, vrot, beta=0.4):
+    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None):
         """
             Convolves the spectrum with a rotational kernel
             vrot is given in km/s
             beta is a limb-darkening factor (default=0.4)
-            
+            smallDelta is the wavlength delta that will be used when interpolating
         """
-        
-        smallDelta = np.diff(self.wave).min()
+        if smallDelta == None:
+            smallDelta = np.diff(self.wave).min()
         
         maxWave = self.wave.max()
         minWave = self.wave.min()
@@ -384,7 +384,7 @@ class onedspec(object):
         bound = maxWave * (vrot / c)
         
         rotKernelX = (np.arange(maxWave - bound, maxWave + bound, smallDelta) - maxWave) / bound
-        
+        rotKernelX[rotKernelX**2>1] = 1.
         rotKernel = ((2/np.pi) * np.sqrt(1-rotKernelX**2) + (beta/2) * (1-rotKernelX**2)) / (1+(2*beta)/3)
         
         rotKernel /= np.sum(rotKernel)
@@ -400,13 +400,15 @@ class onedspec(object):
         
         return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
         
-    def convolve_profile(self, R, initialR = np.inf):
+    def convolve_profile(self, R, initialR = np.inf, smallDelta=None):
         """
             Smooth to given resolution
             * R = resolution to smooth to
-            * initial R = 
+            * initial R =
+            smallDelta is the wavlength delta that will be used when interpolating
         """
-        smallDelta = np.diff(self.wave).min()
+        if smallDelta == None:
+            smallDelta = np.diff(self.wave).min()
         
         maxWave = self.wave.max()
         minWave = self.wave.min()
