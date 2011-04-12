@@ -371,7 +371,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
             
         else: point_spacing = 25
         
-        if kwargs.has_key('moving_std') and kwargs['moving_std'] and kwargs.has_key('std_neighbours'):
+        if kwargs.has_key('static_std') and not kwargs['static_std'] and kwargs.has_key('std_neighbours'):
             try:
                 std_neighbours = int(kwargs['std_neighbours'])
             except:
@@ -409,7 +409,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
     
         residual = spectrum.flux - continuum
         
-        if kwargs.has_key('moving_std') and kwargs['moving_std']: sigma = _running_std(residual, neighbours=std_neighbours)
+        if kwargs.has_key('static_std') and not kwargs['static_std']: sigma = _running_std(residual, neighbours=std_neighbours)
         else: sigma = np.std(residual)
         
         residual_sigma = residual/sigma
