@@ -257,7 +257,18 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
     return profiles
 
 
-def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1., niterate=2, grow=1., continuum_regions=None, weights=None, **kwargs):
+def _running_std(values, neighbours=50):
+    
+    stds = []
+    num_values = len(values)
+    for i in xrange(num_values):
+        stds.append(np.std(values[np.max([0, i - neighbours]):np.min([num_values, i + neighbours])]))
+
+    return np.array(stds)
+    
+    
+
+def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5., niterate=4, grow=4., continuum_regions=None, weights=None, **kwargs):
 
     """
     
@@ -299,7 +310,7 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
 
     # Input checks
     
-    functions = ['legendre', 'chebyshev', 'spline', 'biezer']
+    functions = ['legendre', 'spline']
     
     if function not in functions:
         raise ValueError('Unknown continuum function type specified (%s). Available function types are: %s' % (function, ', '.join(functions), ))
@@ -342,73 +353,191 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
         
     else: positions, values = spectrum.wave, spectrum.flux
     
-    first_pass = True
-    sample = len(spectrum.wave) + 1
+    # Keyword argument checks
     
-    while (niterate > 0) and (sample > len(positions)):
+    if function in ['spline']:
+        if kwargs.has_key('knot_spacing'):
+            try:
+                knot_spacing = float(kwargs['knot_spacing'])
+            except:
+                raise ValueError('Invalid keyword argument for knot_spacing provided. This must be a floating point-type value.')
+        else: knot_spacing = 150
         
-        sample = len(positions)
+        if kwargs.has_key('point_spacing'):
+            try:
+                point_spacing = float(kwargs['point_spacing'])
+            except:
+                raise ValueError('Invalid keyword argument for point_spacing provided. This must be a floating point-type value.')
+            
+        else: point_spacing = 25
+        
+        if kwargs.has_key('moving_std') and kwargs['moving_std'] and kwargs.has_key('std_neighbours'):
+            try:
+                std_neighbours = int(kwargs['std_neighbours'])
+            except:
+                raise ValueError('Invalid keyword argument for std_neighbours provided. This must be an integer-type value.')
+            
+        else: std_neighbours = 150
+    
+    
+    while niterate > 0:
+    
+        assert len(positions) > 0
     
         if function == 'legendre':
             
             coeffs = scipy.polyfit(positions, values, order)
             continuum = scipy.polyval(coeffs, spectrum.wave)
            
-        elif function == 'biezer':
-            
-            if kwargs.has_key('knots'):
-                knots = kwargs['knots']
-            else:
-                if kwargs.has_key('bp'): bp = kwargs['bp']
-                else: bp = 50.
-                
-                knots = np.arange((int(positions[0] / bp) + 1) * bp, int(positions[-1] / bp) * bp, bp)
-            
-            if first_pass:
-                positions = list(positions)
-                values = list(values)
-                for knot in knots:
-                    try:
-                        idx = positions.index(knot)
-                    except:
-                        pass
-                    else:
-                        del positions[idx], values[idx]
-                
-                first_pass = False
-            
-            spline = scipy.interpolate.splrep(positions, values, t=knots)
-            continuum = scipy.interpolate.splev(spectrum.wave, spline)
-            
         elif function == 'spline':
             
-            spline = scipy.interpolate.splrep(positions, values, task=0, s=0.5)
+            edge = ((positions[-1] - positions[0]) % knot_spacing) / 2
+            knots = np.arange(positions[0] + edge, positions[-1] - edge, knot_spacing)
+            
+            for i, knot in enumerate(knots):
+                if knot in positions:
+                    knots[i] += np.diff(positions)[0]/2.
+                    
+                    
+            spline = scipy.interpolate.splrep(positions, values, w=weights, k=order, t=knots)
             continuum = scipy.interpolate.splev(spectrum.wave, spline)
+            
               
         else:
             raise NotImplementedError('This type of continuum profile fitting hasn\'t been implemented yet')
 
-            
+    
         residual = spectrum.flux - continuum
-        sigma = np.std(residual)
         
-        sigma_residual = residual/sigma
+        if kwargs.has_key('moving_std') and kwargs['moving_std']: sigma = _running_std(residual, neighbours=std_neighbours)
+        else: sigma = np.std(residual)
+        
+        residual_sigma = residual/sigma
+    
+    
+        allowed_low = scipy.where(residual_sigma > -low_reject, 1, 0)
+    
+        j, num = (0, len(allowed_low))
+        in_excluded, region_start = (False, 0)
+        
+        while (num > j):
+            
+            excluded = allowed_low[j]
+            
+            if not excluded and not in_excluded:
+                region_start, in_excluded = (j, True)
+                
+            elif excluded and in_excluded:
+                region_end, in_excluded = (j - 1, False)
+                
+                if type(grow) == float:
 
-        allowed_low = scipy.where(low_reject > sigma_residual, 1, 0)
-        allowed_high = scipy.where(sigma_residual > -high_reject, 1, 0)
+                    subset = spectrum[region_start:region_end + 1]
+                    peak = np.min(subset.flux)
+                    position = subset.wave[scipy.argmin(subset.flux)]
+                    
+                    index = spectrum.wave.searchsorted(position)
+                
+                    p, m, n = (0, 0, len(spectrum.wave))
+                
+                    while (n > index + p + 1) and (spectrum.flux[index + p] < spectrum.flux[index + p + 1]):
+                        p += 1
+                        
+                    while (index - m - 1 > 0) and (spectrum.flux[index - m] < spectrum.flux[index - m - 1]):
+                        m += 1
+                        
+                    # If the line extends past subset region, then expand it and try to
+                    # fit a line, otherwise we will just grow outwards
+                    
+                    fitfunc = lambda p, x: continuum[spectrum.wave.searchsorted(x[0]):spectrum.wave.searchsorted(x[-1]) + 1] - p[0] * scipy.exp(-(x - p[1])**2 / (2. * p[2]**2))
+                    errfunc = lambda p, x, y: fitfunc(p, x) - y
+            
+                    p0 = scipy.c_[peak, position, 2]
+                    
+                    o = np.max([p, m])
+                    
+                    
+                    a1 = np.max([0, index - o])
+                    b1 = np.min([o + index, n])
+                    print a1, b1
+                    
+                    try:
+                        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[a1:b1].wave, spectrum[a1:b1].flux))
+                    
+                    except:
+                        allowed_low[region_start - grow:region_end + grow] = 0
+                        j += grow
+                      
+                    else:
+                        if p1[2] > 0 and 2 > p1[0]/peak and p1[0]/peak > 0:
+                            
+                            idx_a = spectrum.wave.searchsorted(position - grow*p1[2])
+                            idx_b = spectrum.wave.searchsorted(position + grow*p1[2])
+                            
+                            a = np.min([idx_a, region_start])
+                            b = np.max([idx_b, region_end])
+                            
+                            #print niterate, p1, success, [spectrum.wave[_] for _ in [region_start, region_end, idx_a, idx_b, a, b]]
+                            
+                            allowed_low[a:b] = np.zeros(b-a)
+                            j = b 
+                    
+                        else:
+                            allowed_low[region_start - grow:region_end + grow] = 0
+                            j += grow
+                else:
+                
+                    allowed_low[region_start - grow:region_end + grow] = 0
+                    j += grow
+            
+            j += 1
+            
+        
+        allowed_high = scipy.where(high_reject > residual_sigma, 1, 0)
+        # todo put in code for allowed_high checking for cosmic rays or skylines
         
         allowed = allowed_low * allowed_high.T
+    
+        values = []
+        weights = []
+        positions = []
+        continuum_regions = []
+    
+        region_start, in_continuum = (0, False)
         
-        i, n = 0, len(allowed)
-        while n > i:
-            if not allowed[i]:
-                rs, re = np.max([0, i-grow]), np.min([n-1, i+grow+1])
-                allowed[rs:re] = np.zeros(re-rs)
-                i += grow
-            i += 1
-    
-    
-        positions, values = zip(*spectrum.data[scipy.nonzero(allowed)])
+        for j, is_continuum in enumerate(allowed):
+            
+            if is_continuum and not in_continuum: region_start, in_continuum = (j, True)
+            
+            elif in_continuum and (not is_continuum or j + 1 == len(allowed)):
+                
+                region_end, in_continuum = (j - 1, False)
+                if is_continuum: j += 1 # correction for last continuum region        
+                
+                if (spectrum.wave[region_end] - spectrum.wave[region_start]) > 1.:
+                    continuum_regions.append((region_start, region_end))
+                    
+                    if spectrum.wave[region_end] - spectrum.wave[region_start] > point_spacing * 3:
+                        regions = []
+                        
+                        edge = ((spectrum.wave[region_end] - spectrum.wave[region_start]) % point_spacing) / 2
+                        points = np.arange(spectrum.wave[region_start] + edge, spectrum.wave[region_end] - edge, point_spacing)
+                        
+                        for point in points:
+                            regions.append((point - point_spacing / 2., point + point_spacing / 2.))
+                            
+                    else:
+                        regions = [(region_start, region_end)]
+                        
+                        
+                    for (region_start, region_end) in regions:
+                        region = spectrum[region_start:region_end]
+                        
+                        positions.append(np.median(region.wave))
+                        values.append(np.max(region.flux) - 0.5 * (np.max(region.flux) - np.median(region.flux)))
+                        weights.append(np.sum((continuum[region.wave.searchsorted(region_start):region.wave.searchsorted(region_end) + 1] - region.flux)**2 * (region_end - region_start)))
+                
+
         niterate -= 1
 
     continuum_regions = []
@@ -433,5 +562,7 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
         return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, coeffs)
         
         
+
+
 
 
