@@ -3,6 +3,7 @@ from base import onedspec
 import numpy as np
 import scipy
 import scipy.optimize
+from scipy import ndimage
 
 
 def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
@@ -434,4 +435,42 @@ def normalise(spectrum, function='biezer', order=3, low_reject=3., high_reject=1
         
         
 
+def cross_correlate(spectrum, template):
+    """
+    Cross correlates a spectrum with a template spectrum
+    
+    
+    Inputs
+    ------
+    
+    spectrum    :   Spectrum to crosscorrelate against template. Must be a :class:`onedspec`
+                    class object.
+                    
+    template    :   Template to crosscorrelate against spectrum. Must be a :class:`onedspec`
+                    class object.
+    
+    peak_tol    :   The peak of the profile will be found in the region from
+                    (line - peak_tol) to (line + peak_tol). This can be set to
+                    zero if the peak of the profile is already known.
+                    
+                    
+    Outputs
+    -------
+    
+    peak        :   Peak value of the profile found
+    
+    position    :   Position of the profile centroid (Angstroms)
+    
+    sigma       :   Gaussian sigma found for the best-fitting profile.
+    
+    """
+    newWave = 3e5*(spectrum.wave - np.mean(spectrum.wave)) / np.mean(spectrum.wave)
+    crossCorrelation = ndimage.correlate1d(spectrum.flux, template.interpolate(spectrum.wave).flux, mode='wrap')
+    
+    peak = newWave[np.argmax(crossCorrelation)]
+    crossCorrSpectrum = onedspec(newWave, crossCorrelation, type='waveflux')
+    
+    return fitprofs(crossCorrSpectrum, peak)[1]
+    
+    
 
