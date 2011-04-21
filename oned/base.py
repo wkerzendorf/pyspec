@@ -10,7 +10,6 @@ import pyfits
 debug = True
 num_precission = 1e-6
 c = 299792.458
-
 def spec_operation(func):
     def convert_operands(self, operand):
         """
@@ -247,22 +246,14 @@ class onedspec(object):
             return self.flux[new_index]
             
         elif isinstance(index, slice):
-            if index.start != None:
+            start, stop, step = index.start, index.stop, index.step
+
+            if isinstance(index.start, float):
                 start = self.wave.searchsorted(index.start)
-            else:
-                start = None
-
-
-            if index.stop !=None:
+                    
+            if isinstance(index.stop, float):
                 stop = self.wave.searchsorted(index.stop)
                 if len(self.wave) > stop: stop += 1
-            else:
-                stop = None
-                
-            if index.step !=None:
-                raise NotImplementedError('Step size in pyspec has not been implemented yet')
-            
-            
             
             return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
@@ -444,7 +435,7 @@ class onedspec(object):
         crpix1 = 1
         #checking for uniformness
         cdelt1 = np.mean(np.diff(self.wave))
-        testWave = np.arange(crval1, self.wave.max()+cdelt1-num_precission, cdelt1, dtype=self.wave.dtype)
+        testWave = np.arange(crval1, self.wave.max()+cdelt1, cdelt1, dtype=self.wave.dtype)
         if np.max(testWave-self.wave) > num_precission:
             raise ValueError("Spectrum not on a uniform grid (error %s), cannot save to fits" % np.max(testWave-self.wave))
         
