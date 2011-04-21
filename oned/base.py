@@ -64,7 +64,6 @@ def spec_operation(func):
                         union_start = self.interpolate(operand_bound.wave[0]).data
                     
                     if self.wave[-1] > operand_bound.wave[-1]:
-
                         self_bound.data = self_bound.data[:-1:]
                         union_end = self.interpolate(operand_bound.wave[-1]).data
                         
@@ -81,12 +80,13 @@ def spec_operation(func):
                         u_y = operand.interpolate(u_x.wave).flux
                         
                     else:
+                        
                         u_x = self.interpolate(operand_bound.wave)
                         
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         
-                        u_y = operand[u_x.wave[0]:u_x.wave[-1]].flux
+                        u_y = operand.interpolate(u_x.wave).flux
                         
                     return func(u_x, u_y)
                 else:
@@ -289,7 +289,7 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux + operand, type='waveflux')
+        return self.__class__(self.wave, self.flux - operand, type='waveflux')
         
 
     @spec_operation
@@ -314,6 +314,10 @@ class onedspec(object):
         
         return self.__class__(self.wave, self.flux ** operand, type='waveflux')
         
+
+    def __len__(self):
+        return len(self.wave)
+
 
     # Mirror functions
     
