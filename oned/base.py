@@ -76,10 +76,19 @@ def spec_operation(func):
                         
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
-                            
-                        u_y = operand.interpolate(u_x.wave).flux
                         
+                        # todo - these *shouldn't* be required,...    
+                        while (u_x.wave[0] < operand_bound.wave[0]): u_x = u_x[1:]
+                        while (u_x.wave[-1] > operand_bound.wave[-1]): u_y = u_y[:-1]
+                        
+                        u_y = operand.interpolate(u_x.wave).flux
+                    
                     else:
+                        
+                        # todo - these *shouldn't* be required,... operand_bound may splice incorrectly.
+                        
+                        while (operand_bound.wave[-1] > self.wave[-1]): operand_bound = operand_bound[:-1]
+                        while (operand_bound.wave[0] < self.wave[0]): operand_bound = operand_bound[1:]
                         
                         u_x = self.interpolate(operand_bound.wave)
                         
