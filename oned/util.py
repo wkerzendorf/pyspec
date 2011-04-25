@@ -353,6 +353,8 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
         
     else: positions, values = spectrum.wave, spectrum.flux
     
+    if weights == None: weights = np.ones(len(positions))
+    
     # Keyword argument checks
     
     if function in ['spline']:
@@ -381,7 +383,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
     
     
     while niterate > 0:
-    
+        
         assert len(positions) > 0
     
         if function == 'legendre':
@@ -392,13 +394,13 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
         elif function == 'spline':
             
             edge = ((positions[-1] - positions[0]) % knot_spacing) / 2
-            knots = np.arange(positions[0] + edge, positions[-1] - edge, knot_spacing)
+            knots = np.arange(positions[0] + edge, positions[-1], knot_spacing)
             
             for i, knot in enumerate(knots):
                 if knot in positions:
                     knots[i] += np.diff(positions)[0]/2.
                     
-                    
+            #print knots
             spline = scipy.interpolate.splrep(positions, values, w=weights, k=order, t=knots)
             continuum = scipy.interpolate.splev(spectrum.wave, spline)
             
@@ -459,7 +461,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
                     
                     a1 = np.max([0, index - o])
                     b1 = np.min([o + index, n])
-                    print a1, b1
+                    #print a1, b1
                     
                     try:
                         p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[a1:b1].wave, spectrum[a1:b1].flux))
