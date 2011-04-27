@@ -143,7 +143,7 @@ class onedspec(object):
         if not (header.has_key('CRVAL1') and header.has_key('CDELT1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CDELT1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        wave = np.arange(header['CRVAL1'], header['CRVAL1'] + (header['NAXIS1'])*header['CDELT1'], header['CDELT1'])
+        wave = header['CRVAL1'] + np.arange(header['NAXIS'])*header['CDELT1']
         flux = fitsFile[0].data.reshape([item for item in fitsFile[0].data.shape if item!=1])
         return cls(wave, flux, type='waveflux')
         
@@ -298,7 +298,7 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux + operand, type='waveflux')
+        return self.__class__(self.wave, self.flux - operand, type='waveflux')
         
 
     @spec_operation

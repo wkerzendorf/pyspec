@@ -3,8 +3,7 @@ from base import onedspec
 import numpy as np
 import scipy
 import scipy.optimize
-from scipy import ndimage
-
+from scipy import ndimage, interpolate, optimize
 
 def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     """
@@ -228,7 +227,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
 
         peak_spectrum = spectrum[line - peak_tol:peak_tol + line]
         
-        peak = max(peak_spectrum.flux)
+        peak = np.max(peak_spectrum.flux)
         index = scipy.where(peak_spectrum.flux==peak)[0][0]
         position = peak_spectrum.wave[index]
         
@@ -244,7 +243,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         while (index - m - 1 > 0) and (spectrum.flux[index - m] > spectrum.flux[index - m - 1]):
             m += 1
     
-        fitfunc = lambda p, x: p[0] * scipy.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
+        fitfunc = lambda p, x: p[0] * np.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
         errfunc = lambda p, x, y: fitfunc(p, x) - y
         
         p0 = scipy.c_[peak, position, 5]
@@ -564,7 +563,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
         
         
 
-def cross_correlate(spectrum, template):
+def cross_correlate(spectrum, template, mode='shift'):
     """
     Cross correlates a spectrum with a template spectrum
     
@@ -595,12 +594,21 @@ def cross_correlate(spectrum, template):
     """
     newWave = 3e5*(spectrum.wave - np.mean(spectrum.wave)) / np.mean(spectrum.wave)
     crossCorrelation = ndimage.correlate1d(spectrum.flux, template.interpolate(spectrum.wave).flux, mode='wrap')
+    crossCorrelation -= np.median(crossCorrelation)
     
-    peak = newWave[np.argmax(crossCorrelation)]
+    peakPos = newWave[np.argmax(crossCorrelation)]
+    peak = np.max(crossCorrelation)
+    
     crossCorrSpectrum = onedspec(newWave, crossCorrelation, type='waveflux')
-    
-    return fitprofs(crossCorrSpectrum, peak)[1]
-    
+    if mode == 'spectrum':
+        return crossCorrSpectrum
+    elif mode == 'shift':
+        fitfunc = lambda p, x: p[0] * np.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
+        errfunc = lambda p, x, y: fitfunc(p, x) - y
+        
+        return optimize.leastsq(errfunc, (peak, peakPos, 1), args=(crossCorrSpectrum.wave, crossCorrSpectrum.flux))[0]
+    else:
+        raise NotImplementedError('Mode %s is not supported' % mode)
     
 
 
