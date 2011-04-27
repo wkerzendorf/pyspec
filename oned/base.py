@@ -10,7 +10,6 @@ import pyfits
 debug = True
 num_precission = 1e-6
 c = 299792.458
-
 def spec_operation(func):
     def convert_operands(self, operand):
         """
@@ -65,7 +64,6 @@ def spec_operation(func):
                         union_start = self.interpolate(operand_bound.wave[0]).data
                     
                     if self.wave[-1] > operand_bound.wave[-1]:
-
                         self_bound.data = self_bound.data[:-1:]
                         union_end = self.interpolate(operand_bound.wave[-1]).data
                         
@@ -78,16 +76,26 @@ def spec_operation(func):
                         
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
-                            
-                        u_y = operand.interpolate(u_x.wave).flux
                         
+                        # todo - these *shouldn't* be required,...    
+                        while (u_x.wave[0] < operand_bound.wave[0]): u_x = u_x[1:]
+                        while (u_x.wave[-1] > operand_bound.wave[-1]): u_y = u_y[:-1]
+                        
+                        u_y = operand.interpolate(u_x.wave).flux
+                    
                     else:
+                        
+                        # todo - these *shouldn't* be required,... operand_bound may splice incorrectly.
+                        
+                        while (operand_bound.wave[-1] > self.wave[-1]): operand_bound = operand_bound[:-1]
+                        while (operand_bound.wave[0] < self.wave[0]): operand_bound = operand_bound[1:]
+                        
                         u_x = self.interpolate(operand_bound.wave)
                         
                         if type(union_start) != type(bool()): u_x.data = np.insert(u_x.data, 0, union_start, axis=0)
                         if type(union_end) != type(bool()): u_x.data = np.append(u_x.data, [union_end], axis=0)
                         
-                        u_y = operand[u_x.wave[0]:u_x.wave[-1]].flux
+                        u_y = operand.interpolate(u_x.wave).flux
                         
                     return func(u_x, u_y)
                 else:
@@ -247,22 +255,14 @@ class onedspec(object):
             return self.flux[new_index]
             
         elif isinstance(index, slice):
-            if index.start != None:
+            start, stop, step = index.start, index.stop, index.step
+
+            if isinstance(index.start, float):
                 start = self.wave.searchsorted(index.start)
-            else:
-                start = None
-
-
-            if index.stop !=None:
+                    
+            if isinstance(index.stop, float):
                 stop = self.wave.searchsorted(index.stop)
                 if len(self.wave) > stop: stop += 1
-            else:
-                stop = None
-                
-            if index.step !=None:
-                raise NotImplementedError('Step size in pyspec has not been implemented yet')
-            
-            
             
             return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
@@ -323,6 +323,10 @@ class onedspec(object):
         
         return self.__class__(self.wave, self.flux ** operand, type='waveflux')
         
+
+    def __len__(self):
+        return len(self.wave)
+
 
     # Mirror functions
     
@@ -444,7 +448,7 @@ class onedspec(object):
         crpix1 = 1
         #checking for uniformness
         cdelt1 = np.mean(np.diff(self.wave))
-        testWave = np.arange(crval1, self.wave.max()+cdelt1-num_precission, cdelt1, dtype=self.wave.dtype)
+        testWave = np.arange(crval1, self.wave.max()+cdelt1, cdelt1, dtype=self.wave.dtype)
         if np.max(testWave-self.wave) > num_precission:
             raise ValueError("Spectrum not on a uniform grid (error %s), cannot save to fits" % np.max(testWave-self.wave))
         
