@@ -147,21 +147,27 @@ class onedspec(object):
     def from_fits(cls, filename, **kwargs):
         fitsFile = pyfits.open(filename, **kwargs)
         header = fitsFile[0].header
-        
-        if not (header.has_key('CRVAL1') and header.has_key('CDELT1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
-            raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CDELT1, CRPIX1 and NAXIS1).\n'
+        if not header.has_key('CDELT1') or header.has_key('CD1_1'):
+            raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        wave = header['CRVAL1'] + np.arange(header['NAXIS'])*header['CDELT1']
+        if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
+            
+            raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
+                             'onedspec can\'t create a spectrum from this fitsfile')
+        wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*header['CDELT1']
         flux = fitsFile[0].data.reshape([item for item in fitsFile[0].data.shape if item!=1])
         return cls(wave, flux, type='waveflux')
         
     def __init__(self, *args, **kwargs):
+        #deprecate type soon
+        if kwargs.has_key('type') and not kwargs.has_key('mode'):
+            kwargs['mode'] = kwargs['type']
         
-        if kwargs.has_key('type'):
-            if kwargs['type'] == 'ndarray':
+        if kwargs.has_key('mode'):
+            if kwargs['mode'] == 'ndarray':
 
                 self.data = args[0]
-            elif kwargs['type'] ==  'waveflux':
+            elif kwargs['mode'] ==  'waveflux':
 
                 self.data = np.vstack((args[0], args[1])).transpose()
         else:        
@@ -269,21 +275,6 @@ class onedspec(object):
         else:
             return self.data[index]
             
-    def interpolate(self, wl_reference, mode='linear'):
-        """
-        Interpolate your spectrum on the reference wavelength grid.
-        
-        """
-
-        if mode == 'linear':
-            f = interpolate.interp1d(self.wave, self.flux, kind='linear', copy=False)
-            if isinstance(wl_reference, float):
-                return self.__class__(np.array([wl_reference, f(wl_reference)]), type='ndarray')
-            else:
-                return self.__class__(np.array(zip(wl_reference, f(wl_reference))), type='ndarray')
-        else:
-            return NotImplementedError('Non-linear interpolation not implemented yet.')
-
 
     @spec_operation
     def __add__(self, operand):
@@ -345,6 +336,36 @@ class onedspec(object):
     def __rpow__(self, spectrum, **kwargs):
         return self.__pow__(spectrum, **kwargs)
     
+    
+    def interpolate(self, wl_reference, mode='linear'):
+        """
+        Interpolate your spectrum on the reference wavelength grid.
+        
+        """
+        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=0.0)
+        
+        if isinstance(wl_reference, float):
+            return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
+        else:
+            return self.__class__(np.array(zip(wl_reference, f(wl_reference))), mode='ndarray')
+        
+    def interpolate_log(self, smallDelta=None, mode='linear'):
+        """
+            smallDelta is the wavelength delta that will be used when
+                    interpolating on logspace
+                    if not specified it will be the minimal wavelength delta in the wave array
+        """
+        if smallDelta == None:
+            smallDelta = np.diff(self.wave).min()
+        
+        maxWave = self.wave.max()
+        minWave = self.wave.min()
+        
+        logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
+        
+        return smallDelta, self.interpolate(logWave, mode=mode)
+        
+    
     def add_noise(self, reqS2N, assumS2N=np.inf):
         #Adding noise to the spectrum. you can give it required noise and assumedNoise
         #remember 1/inf =0 for synthetic spectra
@@ -359,17 +380,23 @@ class onedspec(object):
         return self.__class__(self.wave, newy, type='waveflux')
 
 
-    def shift_velocity(self,v=None,z=None):
-        #shift the spectrum given a velocity or a redshift. velocity is assumed to be in km/s
+    def shift_velocity(self, v=None, z=None, interp=True):
+        """
+            shift the spectrum given a velocity or a redshift. velocity is assumed to be in km/s
+            interp if set to true will shift but then interpolate onto the old wavelength grid
+        """
         if v==None and z==None:
             raise ValueError('Please provide either v or z to shift it')
         #Velocity in km/s
         c=3e5
         if v != None:
-            return self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux, type='waveflux')
+            shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux, type='waveflux')
             
         elif z!=None:
-            return self.__class__(self.wave*(1+z) , self.flux, type='waveflux')
+            shiftSpec = self.__class__(self.wave*(1+z) , self.flux, type='waveflux')
+            
+        if interp:
+            shiftSpec.interpolate(self.wave)
     def gaussian_smooth(self, kernel, **kwargs):
         """
         
@@ -381,18 +408,26 @@ class onedspec(object):
         self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         return self
-    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None):
+    
+    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None, isLog=False, convolveMode='nearest'):
         """
             Convolves the spectrum with a rotational kernel
             vrot is given in km/s
             beta is a limb-darkening factor (default=0.4)
             smallDelta is the wavlength delta that will be used when interpolating
+            isLog  - set true if the wavelength solution already has logarithmic spacing
+            convolveMode - mode passed to ndimage.convolve1d
+            
         """
-        if smallDelta == None:
-            smallDelta = np.diff(self.wave).min()
         
-        maxWave = self.wave.max()
-        minWave = self.wave.min()
+        if not isLog:
+            smallDelta, logSpec = self.interpolate_log(smallDelta)
+        else:
+            smallDelta = self.wave[-1]-self.wave[-2]
+            logSpec = self
+        
+        maxWave = logSpec.wave.max()
+        minWave = logSpec.wave.min()
         
         bound = maxWave * (vrot / c)
         
@@ -401,54 +436,60 @@ class onedspec(object):
         rotKernel = ((2/np.pi) * np.sqrt(1-rotKernelX**2) + (beta/2) * (1-rotKernelX**2)) / (1+(2*beta)/3)
         
         rotKernel /= np.sum(rotKernel)
-        logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
+
         
-        f = interpolate.splrep(self.wave, self.flux, k=1)
+        rotLogFlux = ndimage.convolve1d(logSpec.flux, rotKernel, mode=convolveMode)
         
-        logSpec = interpolate.splev(logWave, f)
+        rotLogSpec = self.__class__(logSpec.wave, rotLogFlux, mode='waveflux')
         
-        rotLogSpec = ndimage.convolve1d(logSpec, rotKernel, mode='nearest')
+        if isLog:
+            return rotLogSpec
+        else:
+            return rotLogSpec.interpolate(self.wave)
         
-        f = interpolate.splrep(logWave, rotLogSpec, k=1)
-        
-        return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
-        
-    def convolve_profile(self, R, initialR = np.inf, smallDelta=None):
+    def convolve_profile(self, R, initialR = np.inf, smallDelta=None, isLog=False, convolveMode='nearest'):
         """
             Smooth to given resolution
             * R = resolution to smooth to
             * initial R =
             smallDelta is the wavlength delta that will be used when interpolating
         """
-        if smallDelta == None:
-            smallDelta = np.diff(self.wave).min()
         
-        maxWave = self.wave.max()
-        minWave = self.wave.min()
+        if not isLog:
+            smallDelta, logSpec = self.interpolate_log(smallDelta)
+        else:
+            smallDelta = self.wave[-1]-self.wave[-2]
+            logSpec = self
+        
+        maxWave = logSpec.wave.max()
+        minWave = logSpec.wave.min()
+        
         smoothFWHM = np.sqrt((maxWave/R)**2 - (maxWave/initialR)**2)
         smoothSigma = (smoothFWHM/(2*np.sqrt(2*np.log(2))))/smallDelta
         
-        logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
         
-        f = interpolate.splrep(self.wave, self.flux, k=1)
+        smoothLogFlux = ndimage.gaussian_filter1d(logSpec.flux, smoothSigma, mode=convolveMode)
         
-        logSpec = interpolate.splev(logWave, f)
-        smoothLogSpec = ndimage.gaussian_filter1d(logSpec, smoothSigma)
+        smoothLogSpec = self.__class__(logSpec.wave, smoothLogFlux, mode='waveflux')
         
-        f = interpolate.splrep(logWave, smoothLogSpec, k=1)
+        if isLog:
+            return smoothLogSpec
+        else:
+            return smoothLogSpec.interpolate(self.wave)
         
-        return self.__class__(self.wave, interpolate.splev(self.wave, f), type='waveflux')
         
         
-    def to_ascii(self, filename):
-        pass
+    def to_ascii(self, filename, **kwargs):
+        np.savetxt(filename, self.data, **kwargs)
     
     def to_fits(self, filename):
         crval1 = self.wave.min()
         crpix1 = 1
         #checking for uniformness
         cdelt1 = np.mean(np.diff(self.wave))
-        testWave = np.arange(crval1, self.wave.max()+cdelt1, cdelt1, dtype=self.wave.dtype)
+        
+        testWave = (crval1 + np.arange(len(self.wave), dtype=self.wave.dtype)*cdelt1).astype(self.wave.dtype)
+        
         if np.max(testWave-self.wave) > num_precission:
             raise ValueError("Spectrum not on a uniform grid (error %s), cannot save to fits" % np.max(testWave-self.wave))
         

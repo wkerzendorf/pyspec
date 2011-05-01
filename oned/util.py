@@ -611,7 +611,5 @@ def cross_correlate(spectrum, template, mode='shift'):
         return optimize.leastsq(errfunc, (peak, peakPos, 1), args=(crossCorrSpectrum.wave, crossCorrSpectrum.flux))[0]
     else:
         raise NotImplementedError('Mode %s is not supported' % mode)
-    
-
 
 
