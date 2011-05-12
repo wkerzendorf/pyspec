@@ -268,7 +268,10 @@ def _running_std(values, neighbours=50):
     
     
 
-def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5., niterate=4, grow=4., continuum_regions=None, weights=None, **kwargs):
+def normalise(spectrum, function='spline',
+              order=2, low_reject=1., high_reject=5.,
+              niterate=4, grow=4., continuum_regions=None,
+              weights=None, **kwargs):
 
     """
     
@@ -564,6 +567,12 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
         return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, coeffs)
         
         
+
+def sigma_clipping(spectrum, spec_return=None, spec_mean=None, lower=3., upper=3.):
+    if spec_mean==None:
+        spec_mean = np.mean(spectrum.flux)
+    
+    
 
 def cross_correlate(spectrum, template, mode='shift'):
     """
