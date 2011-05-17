@@ -360,6 +360,14 @@ def normalise(spectrum, function='spline',
     
     # Keyword argument checks
     
+    if kwargs.has_key('point_spacing'):
+        try:
+            point_spacing = float(kwargs['point_spacing'])
+        except:
+            raise ValueError('Invalid keyword argument for point_spacing provided. This must be a floating point-type value.')
+        
+    else: point_spacing = 25
+    
     if function == 'spline':
         if kwargs.has_key('knot_spacing'):
             try:
@@ -367,14 +375,6 @@ def normalise(spectrum, function='spline',
             except:
                 raise ValueError('Invalid keyword argument for knot_spacing provided. This must be a floating point-type value.')
         else: knot_spacing = 150
-        
-        if kwargs.has_key('point_spacing'):
-            try:
-                point_spacing = float(kwargs['point_spacing'])
-            except:
-                raise ValueError('Invalid keyword argument for point_spacing provided. This must be a floating point-type value.')
-            
-        else: point_spacing = 25
         
         if kwargs.has_key('static_std') and not kwargs['static_std'] and kwargs.has_key('std_neighbours'):
             try:
@@ -584,7 +584,7 @@ def normalise(spectrum, function='spline',
     if function in ('biezer', 'spline'):
         return (spectrum / continuum, continuum, continuum_regions, spline)
     else:
-        return (spectrum / continuum, continuum, continuum, continuum_regions, coeffs)
+        return (spectrum / continuum, continuum, continuum_regions, coeffs)
         
         
 
