@@ -396,7 +396,9 @@ class onedspec(object):
             shiftSpec = self.__class__(self.wave*(1+z) , self.flux, type='waveflux')
             
         if interp:
-            shiftSpec.interpolate(self.wave)
+            return shiftSpec.interpolate(self.wave)
+        else:
+            return shiftSpec
     def gaussian_smooth(self, kernel, **kwargs):
         """
         
