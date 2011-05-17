@@ -340,7 +340,7 @@ def normalise(spectrum, function='spline',
             try:
                 continuum_regions = [map(float, (a, b)) for (a, b) in continuum_regions]
                 
-            except TypeError, ValueError:
+            except:
                 raise TypeError('Invalid type for continuum_regions provided. This must be a list-type of tuples demonstrating the start and end of continuum regions, which must be float-types.')
     
         # Continuum regions specified are good, let's continue
@@ -360,7 +360,7 @@ def normalise(spectrum, function='spline',
     
     # Keyword argument checks
     
-    if function in ['spline']:
+    if function == 'spline':
         if kwargs.has_key('knot_spacing'):
             try:
                 knot_spacing = float(kwargs['knot_spacing'])
@@ -384,6 +384,22 @@ def normalise(spectrum, function='spline',
             
         else: std_neighbours = 150
     
+    if order == 0:
+        # Check to see if a region was set by continuum_regions, which would have
+        # been passed into positions, values
+        try:
+            _ = values
+        except NameError:
+            # No problem, default to all values of flux
+            values = spectrum.flux
+        
+        finally:
+            continuum = [np.mean(values)] * len(spectrum.wave)
+        
+        niterate = 0
+        spline = []
+        allowed = continuum_regions
+        
     
     while niterate > 0:
         
@@ -559,6 +575,10 @@ def normalise(spectrum, function='spline',
             
     if in_continuum: # Continuum region is on the reddest edge
         continuum_regions.append((region_start, spectrum.wave[-1]))
+    
+    
+    # Put continuum as onedspec object
+    continuum = onedspec(spectrum.wave, continuum, type='waveflux')
     
     
     if function in ('biezer', 'spline'):
