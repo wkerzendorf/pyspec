@@ -558,6 +558,10 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
         continuum_regions.append((region_start, spectrum.wave[-1]))
     
     
+    # Put continuum as onedspec object
+    continuum = onedspec(spectrum.wave, continuum, type='waveflux')
+    
+    
     if function in ('biezer', 'spline'):
         return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, spline)
     else:
