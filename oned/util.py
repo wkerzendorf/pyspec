@@ -582,9 +582,9 @@ def normalise(spectrum, function='spline',
     
     
     if function in ('biezer', 'spline'):
-        return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, spline)
+        return (spectrum / continuum, continuum, continuum_regions, spline)
     else:
-        return (onedspec(spectrum.wave, spectrum.flux / continuum, type='waveflux'), continuum, continuum_regions, coeffs)
+        return (spectrum / continuum, continuum, continuum, continuum_regions, coeffs)
         
         
 
