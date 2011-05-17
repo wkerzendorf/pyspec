@@ -162,6 +162,16 @@ class onedspec(object):
         #deprecate type soon
         if kwargs.has_key('type') and not kwargs.has_key('mode'):
             kwargs['mode'] = kwargs['type']
+            
+        if kwargs.has_key('dq'):
+            self.dq = kwargs['dq']
+        else:
+            self.dq = None
+        
+        if kwargs.has_key('var'):
+            self.var = kwarfs['var']
+        else:
+            self.var = None
         
         if kwargs.has_key('mode'):
             if kwargs['mode'] == 'ndarray':
