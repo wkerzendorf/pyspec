@@ -358,6 +358,7 @@ def normalise(spectrum, function='spline', order=2, low_reject=1., high_reject=5
     # Keyword argument checks
     
     if function in ['spline']:
+        print 'spline recognised'
         if kwargs.has_key('knot_spacing'):
             try:
                 knot_spacing = float(kwargs['knot_spacing'])
