@@ -633,6 +633,7 @@ def cross_correlate(spectrum, template, mode='shift'):
     sigma       :   Gaussian sigma found for the best-fitting profile.
     
     """
+    
     newWave = 3e5*(spectrum.wave - np.mean(spectrum.wave)) / np.mean(spectrum.wave)
     crossCorrelation = ndimage.correlate1d(spectrum.flux, template.interpolate(spectrum.wave).flux, mode='wrap')
     crossCorrelation -= np.median(crossCorrelation)
