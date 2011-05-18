@@ -141,7 +141,7 @@ class onedspec(object):
         """use the same kwargs with loadtxt"""
         data = np.loadtxt(filename, **kwargs)
 
-        return cls(data[:,:2], mode='ndarry')
+        return cls(data[:,:2], type='ndarray')
 
     @classmethod
     def from_fits(cls, filename, **kwargs):
@@ -156,7 +156,7 @@ class onedspec(object):
                              'onedspec can\'t create a spectrum from this fitsfile')
         wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*header['CDELT1']
         flux = fitsFile[0].data.reshape([item for item in fitsFile[0].data.shape if item!=1])
-        return cls(wave, flux, mode='waveflux')
+        return cls(wave, flux, type='waveflux')
         
     def __init__(self, *args, **kwargs):
         #deprecate type soon
@@ -281,7 +281,7 @@ class onedspec(object):
                 stop = self.wave.searchsorted(index.stop)
                 if len(self.wave) > stop: stop += 1
             
-            return self.__class__(self.data[slice(start, stop)], mode='ndarry')
+            return self.__class__(self.data[slice(start, stop)], type='ndarray')
             
         else:
             return self.data[index]
@@ -292,7 +292,7 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux + operand, mode='waveflux')
+        return self.__class__(self.wave, self.flux + operand, type='waveflux')
         
 
     @spec_operation
@@ -300,7 +300,7 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux - operand, mode='waveflux')
+        return self.__class__(self.wave, self.flux - operand, type='waveflux')
         
 
     @spec_operation
@@ -308,7 +308,7 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux * operand, mode='waveflux')
+        return self.__class__(self.wave, self.flux * operand, type='waveflux')
         
 
     @spec_operation
@@ -316,14 +316,14 @@ class onedspec(object):
         
         """Adds two spectra together, or adds finite real numbers across an entire spectrum."""
         
-        return self.__class__(self.wave, self.flux / operand, mode='waveflux')
+        return self.__class__(self.wave, self.flux / operand, type='waveflux')
         
     @spec_operation
     def __pow__(self, operand):
         
         """Performs power operations on spectra."""
         
-        return self.__class__(self.wave, self.flux ** operand, mode='waveflux')
+        return self.__class__(self.wave, self.flux ** operand, type='waveflux')
         
 
     def __len__(self):
@@ -388,7 +388,7 @@ class onedspec(object):
             
         makeNoiseArray = np.vectorize(makeNoise)
         newy = makeNoiseArray(self.flux)
-        return self.__class__(self.wave, newy, mode='waveflux')
+        return self.__class__(self.wave, newy, type='waveflux')
 
 
     def shift_velocity(self, v=None, z=None, interp=True):
@@ -401,10 +401,10 @@ class onedspec(object):
         #Velocity in km/s
         c=3e5
         if v != None:
-            shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux, mode='waveflux')
+            shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux, type='waveflux')
             
         elif z!=None:
-            shiftSpec = self.__class__(self.wave*(1+z) , self.flux, mode='waveflux')
+            shiftSpec = self.__class__(self.wave*(1+z) , self.flux, type='waveflux')
             
         if interp:
             return shiftSpec.interpolate(self.wave)
