@@ -62,12 +62,12 @@ def fit_arclines(arc_spectrum, arc_lines='auto', sigma_clip=3.0, peak_tol=1.5,):
     else: arc_line_peaks = arc_lines
     
     profiles = fitprofs(arc_spectrum, arc_line_peaks, peak_tol) 
-    fitted_arc = onedspec(arc_spectrum.wave, np.zeros(len(arc_spectrum.wave)), type='waveflux')
+    fitted_arc = onedspec(arc_spectrum.wave, np.zeros(len(arc_spectrum.wave)), mode='waveflux')
     
     fitfunc = lambda p, x: p[0] * scipy.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
     for profile in profiles:
         
-        fitted_arcline = onedspec(fitted_arc.wave, fitfunc(profile, fitted_arc.wave), type='waveflux')
+        fitted_arcline = onedspec(fitted_arc.wave, fitfunc(profile, fitted_arc.wave), mode='waveflux')
         #todo - doing fitted_arc += gave an unsupported operand error
         fitted_arc += fitted_arcline
         
@@ -134,7 +134,7 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
         
         m = m1 * np.transpose(m2)
         
-        return onedspec(synthetic.wave, m, type='waveflux')
+        return onedspec(synthetic.wave, m, mode='waveflux')
         
         
         in_continuum, region_start, wavelength_points = (False, 0, len(m))
@@ -578,7 +578,7 @@ def normalise(spectrum, function='spline',
     
     
     # Put continuum as onedspec object
-    continuum = onedspec(spectrum.wave, continuum, type='waveflux')
+    continuum = onedspec(spectrum.wave, continuum, mode='waveflux')
     
     
     if function in ('biezer', 'spline'):
@@ -623,6 +623,8 @@ def cross_correlate(spectrum, template, mode='shift'):
     sigma       :   Gaussian sigma found for the best-fitting profile.
     
     """
+    
+    
     newWave = 3e5*(spectrum.wave - np.mean(spectrum.wave)) / np.mean(spectrum.wave)
     crossCorrelation = ndimage.correlate1d(spectrum.flux, template.interpolate(spectrum.wave).flux, mode='wrap')
     crossCorrelation -= np.median(crossCorrelation)
@@ -630,7 +632,7 @@ def cross_correlate(spectrum, template, mode='shift'):
     peakPos = newWave[np.argmax(crossCorrelation)]
     peak = np.max(crossCorrelation)
     
-    crossCorrSpectrum = onedspec(newWave, crossCorrelation, type='waveflux')
+    crossCorrSpectrum = onedspec(newWave, crossCorrelation, mode='waveflux')
     if mode == 'spectrum':
         return crossCorrSpectrum
     elif mode == 'shift':
