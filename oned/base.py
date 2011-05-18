@@ -147,10 +147,10 @@ class onedspec(object):
     def from_fits(cls, filename, **kwargs):
         fitsFile = pyfits.open(filename, **kwargs)
         header = fitsFile[0].header
-        if not header.has_key('CDELT1') or header.has_key('CD1_1'):
+        if not (header.has_key('CDELT1') or header.has_key('CD1_1')):
             raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
+        if not ((header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1'))):
             
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
