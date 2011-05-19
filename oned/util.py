@@ -586,23 +586,35 @@ def normalise(spectrum, function='spline',
     else:
         return (spectrum / continuum, continuum, continuum_regions, coeffs)
         
-def normalise2(spectrum, low_rej=2., high_rej=3., function='legendre', order=5):
-    if func=='legendre':
-        fitfunc = np.polynomial.Legendre.fit
+def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3, order=5):
+    def fitLegendre(x, y):
+        p = np.polynomial.Legendre.fit(x, y, order)
+        return p(spectrum.wave)
+
+    def fitChebyshev(x, y):
+        p = np.polynomial.Chebyshev.fit(x, y, order)
+        return p(spectrum.wave)
     
-    params = np.polyfit(spectrum.wave, spectrum.flux, deg=order)
-    contFlux = np.polyval(params, spectrum.wave)
+    if function=='legendre':
+        fitfunc = fitLegendre
+        
+    if function=='chebyshev':
+        fitfunc = fitChebyshev
+
+    contFlux = fitfunc(spectrum.wave, spectrum.flux)
     mask = np.ones(spectrum.wave.shape).astype(bool)
-    for i in range(3):
-        residual = spectrum.flux - contFlux
-        residual_sigma = residual / np.std(residual)
-        high_rej = residual > high_rej
-        low_rej = residual < low_rej
-        mask = np.logical_and(mask, np.logical_not(np.logical_or(high_rej, low_rej)))
-        params = np.polyfit(spectrum.wave, spectrum.flux, deg=order)
-        contFlux = np.polyval(params, spectrum.wave)
+    high_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
+    low_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
+    for i in range(maxiter):
+        residual = (spectrum.flux - contFlux)
+        residual_sigma = residual / np.std(residual[mask])
+        high_rej_mask = np.logical_or(residual_sigma > high_rej, high_rej_mask)
+        low_rej_mask = np.logical_or(residual_sigma < -low_rej, low_rej_mask)
+        mask = np.logical_and(mask, np.logical_not(np.logical_or(high_rej_mask, low_rej_mask)))
+        contFlux = fitfunc(spectrum.wave[mask], spectrum.flux[mask])
     
-    return contFlux
+    return onedspec(spectrum.wave, contFlux, mode='waveflux')
+
 
 def cross_correlate(spectrum, template, mode='shift'):
     """
