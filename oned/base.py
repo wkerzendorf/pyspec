@@ -155,6 +155,9 @@ class onedspec(object):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
         wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*header['CDELT1']
+        if header.has_key('LTV1'):
+            wave -= header['LTV1']
+            
         flux = fitsFile[0].data.reshape([item for item in fitsFile[0].data.shape if item!=1])
         return cls(wave, flux, mode='waveflux')
         
