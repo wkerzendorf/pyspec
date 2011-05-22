@@ -586,7 +586,7 @@ def normalise(spectrum, function='spline',
     else:
         return (spectrum / continuum, continuum, continuum_regions, coeffs)
         
-def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3, order=5):
+def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3, order=5, mode='normal'):
     def fitLegendre(x, y):
         p = np.polynomial.Legendre.fit(x, y, order)
         return p(spectrum.wave)
@@ -612,8 +612,12 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
         low_rej_mask = np.logical_or(residual_sigma < -low_rej, low_rej_mask)
         mask = np.logical_and(mask, np.logical_not(np.logical_or(high_rej_mask, low_rej_mask)))
         contFlux = fitfunc(spectrum.wave[mask], spectrum.flux[mask])
+    if mode == 'normal':
+        return onedspec(spectrum.wave, contFlux, mode='waveflux')
+    elif mode == 'rms':
+        residual = (spectrum.flux[mask] - contFlux[mask])
+        return onedspec(spectrum.wave, contFlux, mode='waveflux'), np.std(residual)
     
-    return onedspec(spectrum.wave, contFlux, mode='waveflux')
 
 
 def cross_correlate(spectrum, template, mode='shift'):

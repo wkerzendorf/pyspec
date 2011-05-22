@@ -147,10 +147,10 @@ class onedspec(object):
     def from_fits(cls, filename, **kwargs):
         fitsFile = pyfits.open(filename, **kwargs)
         header = fitsFile[0].header
-        if not (header.has_key('CDELT1') or header.has_key('CD1_1')):
+        if not header.has_key('CDELT1') or header.has_key('CD1_1'):
             raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        if not ((header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1'))):
+        if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
@@ -164,15 +164,6 @@ class onedspec(object):
             print "Usage of keyword type is deprecated. Please use mode instead"
             kwargs['mode'] = kwargs['type']
             
-        if kwargs.has_key('dq'):
-            self.dq = kwargs['dq']
-        else:
-            self.dq = None
-        
-        if kwargs.has_key('var'):
-            self.var = kwarfs['var']
-        else:
-            self.var = None
         
         if kwargs.has_key('mode'):
             if kwargs['mode'] == 'ndarray':
@@ -239,6 +230,17 @@ class onedspec(object):
             else:
                 raise ValueError('unknown spectrum input provided')
             
+        #check metadata
+        
+        if kwargs.has_key('dq'):
+            self.dq = kwargs['dq']
+        else:
+            self.dq = np.ones(self.data.shape[0]).astype(bool)
+        
+        if kwargs.has_key('var'):
+            self.var = kwargs['var']
+        else:
+            self.var = np.ones(self.data.shape[0]).astype(np.float)
         
         
         self.op_mode = 'on_resolution'
@@ -350,15 +352,24 @@ class onedspec(object):
     
     def interpolate(self, wl_reference, mode='linear'):
         """
-        Interpolate your spectrum on the reference wavelength grid.
+        Interpolate the spectrum on the reference wavelength grid.
         
         """
-        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=0.0)
+        
+        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=0.)
+        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=False, fill_value=1.)
+        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=0.)
         
         if isinstance(wl_reference, float):
+            print "deprecate??"
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
         else:
-            return self.__class__(np.array(zip(wl_reference, f(wl_reference))), mode='ndarray')
+            interp_flux = f(wl_reference)
+            interp_var = f_var(wl_reference)
+            interp_dq = f_dq(wl_reference)
+            interp_dq = np.floor(interp_dq).astype(bool)
+            
+            return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, dq = interp_dq)
         
     def interpolate_log(self, smallDelta=None, mode='linear'):
         """
@@ -401,10 +412,12 @@ class onedspec(object):
         #Velocity in km/s
         c=3e5
         if v != None:
-            shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux, mode='waveflux')
+            shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux,
+                                       mode='waveflux', var=self.var, dq=self.dq)
             
         elif z!=None:
-            shiftSpec = self.__class__(self.wave*(1+z) , self.flux, mode='waveflux')
+            shiftSpec = self.__class__(self.wave*(1+z) , self.flux,
+                                       mode='waveflux', var=self.var, dq=self.dq)
             
         if interp:
             return shiftSpec.interpolate(self.wave)
@@ -417,10 +430,12 @@ class onedspec(object):
         of <kernel> pixels.
         
         """
+        print "Deprecated: method has changed. It now returns a new instance with the smoothing applied"
         
-        self.flux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
+        newFlux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
-        return self
+        
+        return self.__class__(self.wave, newFlux, mode='waveflux', var=self.var, dq=self.dq)
     
     def convolve_rotation(self, vrot, beta=0.4, smallDelta=None, isLog=False, convolveMode='nearest'):
         """
