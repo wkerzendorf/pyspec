@@ -162,12 +162,7 @@ class onedspec(object):
         return cls(wave, flux, mode='waveflux')
         
     def __init__(self, *args, **kwargs):
-        #deprecate type soon
-        if kwargs.has_key('type') and not kwargs.has_key('mode'):
-            print "Usage of keyword type is deprecated. Please use mode instead"
-            kwargs['mode'] = kwargs['type']
-            
-        
+
         if kwargs.has_key('mode'):
             if kwargs['mode'] == 'ndarray':
 
@@ -433,7 +428,7 @@ class onedspec(object):
         of <kernel> pixels.
         
         """
-        print "Deprecated: method has changed. It now returns a new instance with the smoothing applied"
+        
         
         newFlux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         

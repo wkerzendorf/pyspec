@@ -587,14 +587,19 @@ def normalise(spectrum, function='spline',
         return (spectrum / continuum, continuum, continuum_regions, coeffs)
         
 def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3, order=5, mode='normal'):
-    def fitLegendre(x, y):
+    def fitLegendre(x, y, mode='fit'):
         p = np.polynomial.Legendre.fit(x, y, order)
-        return p(spectrum.wave)
+        if mode=='fit':
+            return p(spectrum.wave)
+        if mode=='func':
+            return p
 
-    def fitChebyshev(x, y):
+    def fitChebyshev(x, y, mode='fit'):
         p = np.polynomial.Chebyshev.fit(x, y, order)
-        return p(spectrum.wave)
-    
+        if mode=='fit':
+            return p(spectrum.wave)
+        if mode=='func':
+            return p
     if function=='legendre':
         fitfunc = fitLegendre
         
@@ -602,7 +607,7 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
         fitfunc = fitChebyshev
 
     contFlux = fitfunc(spectrum.wave, spectrum.flux)
-    mask = np.ones(spectrum.wave.shape).astype(bool)
+    mask = spectrum.dq
     high_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
     low_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
     for i in range(maxiter):
@@ -614,9 +619,16 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
         contFlux = fitfunc(spectrum.wave[mask], spectrum.flux[mask])
     if mode == 'normal':
         return onedspec(spectrum.wave, contFlux, mode='waveflux')
+        
     elif mode == 'rms':
         residual = (spectrum.flux[mask] - contFlux[mask])
         return onedspec(spectrum.wave, contFlux, mode='waveflux'), np.std(residual)
+        
+    elif mode == 'full':
+        residual = (spectrum.flux[mask] - contFlux[mask])
+        return (onedspec(spectrum.wave, contFlux, mode='waveflux'),
+                onedspec(spectrum.wave, residual, mode='waveflux'),
+                fitfunc(spectrum.wave[mask], spectrum.flux[mask], mode='func'))
     
 
 
