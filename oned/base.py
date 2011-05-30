@@ -364,7 +364,6 @@ class onedspec(object):
         f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=0.)
         
         if isinstance(wl_reference, float):
-            print "deprecate??"
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
         else:
             interp_flux = f(wl_reference)
