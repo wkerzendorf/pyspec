@@ -392,7 +392,10 @@ class onedspec(object):
         noiseKernel = np.sqrt( (1/float(reqS2N))**2 - (1/assumS2N)**2)
         
         def makeNoise(item):
-            return np.random.normal(item,noiseKernel*item)
+            if item != 0:
+                return np.random.normal(item,noiseKernel*item)
+            else:
+                return 0
             
             
         makeNoiseArray = np.vectorize(makeNoise)
