@@ -162,7 +162,7 @@ class onedspec(object):
         return cls(wave, flux, mode='waveflux')
         
     def __init__(self, *args, **kwargs):
-<<<<<<< HEAD
+
         #deprecate type soon
         if kwargs.has_key('type') and not kwargs.has_key('mode'):
             print "Usage of keyword type is deprecated. Please use mode instead"
@@ -172,9 +172,7 @@ class onedspec(object):
             self.headers = kwargs['headers']
         else: self.headers = {}
         
-=======
 
->>>>>>> f19bd2bfb402afb38fd6dc09c0e5319e3d9f8995
         if kwargs.has_key('mode'):
             if kwargs['mode'] == 'ndarray':
 
