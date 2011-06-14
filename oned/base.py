@@ -147,11 +147,11 @@ class onedspec(object):
     def from_fits(cls, filename, **kwargs):
         fitsFile = pyfits.open(filename, **kwargs)
         header = fitsFile[0].header
-        if not header.has_key('CDELT1') or header.has_key('CD1_1'):
+        if not (header.has_key('CDELT1') or header.has_key('CD1_1')) and not header.has_key('CRVAL1'):
             raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             
+        if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
         wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*header['CDELT1']
@@ -162,6 +162,16 @@ class onedspec(object):
         return cls(wave, flux, mode='waveflux')
         
     def __init__(self, *args, **kwargs):
+
+        #deprecate type soon
+        if kwargs.has_key('type') and not kwargs.has_key('mode'):
+            print "Usage of keyword type is deprecated. Please use mode instead"
+            kwargs['mode'] = kwargs['type']
+            
+        if kwargs.has_key('headers'):
+            self.headers = kwargs['headers']
+        else: self.headers = {}
+        
 
         if kwargs.has_key('mode'):
             if kwargs['mode'] == 'ndarray':
@@ -266,25 +276,18 @@ class onedspec(object):
         
     def __getitem__(self, index):
 
-        if isinstance(index, float):
+        if isinstance(index, slice):
             
-            new_index = self.wave.searchsorted(index)
-            return self.flux[new_index]
-            
-        elif isinstance(index, slice):
-            start, stop, step = index.start, index.stop, index.step
-
-            if isinstance(index.start, float):
-                start = self.wave.searchsorted(index.start)
-                    
-            if isinstance(index.stop, float):
-                stop = self.wave.searchsorted(index.stop)
-                if len(self.wave) > stop: stop += 1
+            start = self.wave.searchsorted(index.start)
+            stop = self.wave.searchsorted(index.stop)
+            if len(self.wave) > stop: stop += 1
             
             return self.__class__(self.data[slice(start, stop)], mode='ndarray')
-            
+        
         else:
-            return self.data[index]
+            # Whether it's a float or an integer..
+            return self.data[self.wave.searchsorted(index)]
+    
             
 
     @spec_operation
@@ -349,7 +352,9 @@ class onedspec(object):
     
     
     def interpolate(self, wl_reference, mode='linear'):
+        
         """
+        
         Interpolate the spectrum on the reference wavelength grid.
         
         """
@@ -359,7 +364,6 @@ class onedspec(object):
         f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=0.)
         
         if isinstance(wl_reference, float):
-            print "deprecate??"
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
         else:
             interp_flux = f(wl_reference)
