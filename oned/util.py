@@ -627,7 +627,7 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
     elif mode == 'full':
         residual = (spectrum.flux[mask] - contFlux[mask])
         return (onedspec(spectrum.wave, contFlux, mode='waveflux'),
-                onedspec(spectrum.wave, residual, mode='waveflux'),
+                onedspec(spectrum.wave, residual_sigma, mode='waveflux'),
                 fitfunc(spectrum.wave[mask], spectrum.flux[mask], mode='func'))
     
 
