@@ -310,7 +310,6 @@ def normalise(spectrum, function='spline',
                     will be rejected.
     
     """
-
     # Input checks
     
     functions = ['legendre', 'spline']
@@ -330,8 +329,8 @@ def normalise(spectrum, function='spline',
     try: niterate = int(niterate)
     except ValueError: raise TypeError('Invalid input for maximum interation number; \'%s\'. Maximum iteration number must be an integer-type.' % (niterate, ))
     
-    if type(grow) not in [float, int]:
-        raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
+    try: grow = int(grow)
+    except ValueError: raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
     if continuum_regions != None and len(continuum_regions) > 0:
         if type(continuum_regions) not in (list, tuple, np.array):
