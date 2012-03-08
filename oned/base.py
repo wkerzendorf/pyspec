@@ -281,6 +281,7 @@ class onedspec(object):
     xy=property(getXY, setXY)
 
         
+
     def __getitem__(self, index):
 
         if isinstance(index, slice):
@@ -293,8 +294,21 @@ class onedspec(object):
                 
                 if len(self.wave) > stop: stop += 1
             
+            new_index = self.wave.searchsorted(index)
+            return self.flux[new_index]
+            
+        elif isinstance(index, slice):
+            start, stop, step = index.start, index.stop, index.step
+
+            if isinstance(index.start, float):
+                start = self.wave.searchsorted(index.start)
+                    
+            if isinstance(index.stop, float):
+                stop = self.wave.searchsorted(index.stop)
+                if len(self.wave) > stop: stop += 1
+            
             return self.__class__(self.data[slice(start, stop)], mode='ndarray')
-        
+            
         else:
             
             return self.data[self.index(index)]
@@ -363,16 +377,11 @@ class onedspec(object):
     
     
     def interpolate(self, wl_reference, mode='linear'):
+        """Interpolate the spectrum on the reference wavelength grid."""
         
-        """
-        
-        Interpolate the spectrum on the reference wavelength grid.
-        
-        """
-        
-        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=0.)
-        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=False, fill_value=1.)
-        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=0.)
+        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
+        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
+        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
         
         if isinstance(wl_reference, float):
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
@@ -380,6 +389,15 @@ class onedspec(object):
             interp_flux = f(wl_reference)
             interp_var = f_var(wl_reference)
             interp_dq = f_dq(wl_reference)
+            
+            bounded_idxs = np.isfinite(interp_flux)
+            if np.sum(bounded_idxs) == 0:
+                raise ValueError('The wavelength region to interpolate to does not overlap with the wavelength of the given spectrum.')
+
+            wl_reference = wl_reference[bounded_idxs]
+            interp_flux = interp_flux[bounded_idxs]
+            interp_var = interp_var[bounded_idxs]
+            interp_dq = interp_dq[bounded_idxs]    
             interp_dq = np.floor(interp_dq).astype(bool)
             
             return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, dq = interp_dq)
@@ -545,17 +563,17 @@ class onedspec(object):
         primaryHDU.header.update('CDELT1', cdelt1)
         primaryHDU.writeto(filename, clobber=True)
     
-    
-    def __conform__(self, protocol):
-        """
-            Function that will automatically return an sqlite binary.
-            This makes it easy to store it in sqlite databases.
-            Most of the time this is called in the background
-        """
-
-        if protocol is sqlite3.PrepareProtocol:
-            return sqlite3.Binary(self.data.tostring())
-        else:
-            raise NotImplementedError('Conforming to protocol %s has not been implemented yet' % protocol)
         
+
+    #def __conform__(self, protocol):
+    #    """
+    #        Function that will automatically return an sqlite binary.
+    #        This makes it easy to store it in sqlite databases.
+    #        Most of the time this is called in the background
+    #    """
+
+    #    if protocol is sqlite3.PrepareProtocol:
+    #        return sqlite3.Binary(self.data.tostring())
+    #    else:
+    #        raise NotImplementedError('Conforming to protocol %s has not been implemented yet' % protocol)
             

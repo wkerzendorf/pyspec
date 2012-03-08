@@ -310,7 +310,6 @@ def normalise(spectrum, function='spline',
                     will be rejected.
     
     """
-
     # Input checks
     
     functions = ['legendre', 'spline']
@@ -330,8 +329,8 @@ def normalise(spectrum, function='spline',
     try: niterate = int(niterate)
     except ValueError: raise TypeError('Invalid input for maximum interation number; \'%s\'. Maximum iteration number must be an integer-type.' % (niterate, ))
     
-    if type(grow) not in [float, int]:
-        raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
+    try: grow = int(grow)
+    except ValueError: raise TypeError('Invalid input for grow number; \'%s\'. Pixels to grow must be either an int- or float-type.' % (grow, ))
     
     if continuum_regions != None and len(continuum_regions) > 0:
         if type(continuum_regions) not in (list, tuple, np.array):
@@ -630,7 +629,34 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
                 onedspec(spectrum.wave, residual_sigma, mode='waveflux'),
                 fitfunc(spectrum.wave[mask], spectrum.flux[mask], mode='func'))
     
-
+def resolving_power(spectrum, mode='normal'):
+    """Calculates the resolving power (R) of a given spectrum
+    
+    
+    Modes available:
+    ----------------
+    
+    normal  -   Returns the median, deviation, minimum and maximum resolving
+                power across the wavelength provided.
+    full    -   Returns the resolving power R as a function of lambda across
+                the wavelength provided.
+    """
+    
+    if not isinstance(spectrum, onedspec):
+        raise TypeError('Spectrum provided must be a pyspec object')
+        
+    available = 'normal full'.split()
+    if mode not in available:
+        raise ValueError('Mode provided for resolving power is not available. Available modes are: %s' % (', '.join(available, )))
+        
+    delta = np.diff(spectrum.wave)
+    wave = spectrum.wave[0:-1] # Err on the minimum R-edge
+    R = wave/delta
+    
+    if mode == 'full': return R
+    else:
+        return (np.median(R), np.std(R), np.min(R), np.max(R))
+    
 
 def cross_correlate(spectrum, template, mode='shift'):
     """
