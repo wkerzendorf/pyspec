@@ -10,6 +10,7 @@ import pyfits
 debug = True
 num_precission = 1e-6
 c = 299792.458
+
 def spec_operation(func):
     def convert_operands(self, operand):
         """
@@ -137,11 +138,11 @@ class onedspec(object):
         return r'<onedspec object over [%3.5f to %3.5f] Angstroms with [flux_min, flux_max] = [%2.1f, %2.1f] values>' % (self.wave.min(), self.wave.max(), self.flux.min(), self.flux.max(),)
     
     @classmethod
-    def from_ascii(cls, filename, **kwargs):
+    def from_ascii(cls, filename, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0, **kwargs):
         """use the same kwargs with loadtxt"""
-        data = np.loadtxt(filename, **kwargs)
+        data = np.loadtxt(filename, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0)
 
-        return cls(data[:,:2], mode='ndarray')
+        return cls(data[:,:2], mode='ndarray', **kwargs)
 
     @classmethod
     def from_fits(cls, filename, **kwargs):
@@ -165,7 +166,7 @@ class onedspec(object):
 
         #deprecate type soon
         if kwargs.has_key('type') and not kwargs.has_key('mode'):
-            print "Usage of keyword type is deprecated. Please use mode instead"
+            raise ValueError("Usage of keyword type is deprecated. Please use mode instead")
             kwargs['mode'] = kwargs['type']
             
         if kwargs.has_key('headers'):
@@ -180,6 +181,8 @@ class onedspec(object):
             elif kwargs['mode'] ==  'waveflux':
 
                 self.data = np.vstack((args[0], args[1])).transpose()
+        
+        
         else:        
             #---- auto check-----
             # If only one argument is passed, it is likely a text file or an arra
@@ -240,6 +243,9 @@ class onedspec(object):
             
         #check metadata
         
+        self.mask = kwargs.get('mask', None)
+        self.error = kwargs.get('error', None)
+        
         if kwargs.has_key('dq'):
             self.dq = kwargs['dq']
         else:
@@ -266,7 +272,8 @@ class onedspec(object):
         raise NotImplementedError('XY can\'t be set')
     def getXY(self):
         return self.data[:, 0], self.data[:, 1]
-    
+    def index(self, wl):
+        return self.wave.searchsorted(wl)
     wave = property(getWavelength, setWavelength)
     flux = property(getFlux, setFlux)
     
@@ -277,16 +284,20 @@ class onedspec(object):
     def __getitem__(self, index):
 
         if isinstance(index, slice):
-            
-            start = self.wave.searchsorted(index.start)
-            stop = self.wave.searchsorted(index.stop)
-            if len(self.wave) > stop: stop += 1
+            start = None
+            stop = None
+            if index.start != None:
+                start = self.wave.searchsorted(index.start)
+            if index.stop != None:
+                stop = self.wave.searchsorted(index.stop)
+                
+                if len(self.wave) > stop: stop += 1
             
             return self.__class__(self.data[slice(start, stop)], mode='ndarray')
         
         else:
-            # Whether it's a float or an integer..
-            return self.data[self.wave.searchsorted(index)]
+            
+            return self.data[self.index(index)]
     
             
 
@@ -428,6 +439,7 @@ class onedspec(object):
             return shiftSpec.interpolate(self.wave)
         else:
             return shiftSpec
+    
     def gaussian_smooth(self, kernel, **kwargs):
         """
         
