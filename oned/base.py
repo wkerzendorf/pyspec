@@ -291,22 +291,7 @@ class onedspec(object):
                 start = self.wave.searchsorted(index.start)
             if index.stop != None:
                 stop = self.wave.searchsorted(index.stop)
-                
-                if len(self.wave) > stop: stop += 1
-            
-            new_index = self.wave.searchsorted(index)
-            return self.flux[new_index]
-            
-        elif isinstance(index, slice):
-            start, stop, step = index.start, index.stop, index.step
 
-            if isinstance(index.start, float):
-                start = self.wave.searchsorted(index.start)
-                    
-            if isinstance(index.stop, float):
-                stop = self.wave.searchsorted(index.stop)
-                if len(self.wave) > stop: stop += 1
-            
             return self.__class__(self.data[slice(start, stop)], mode='ndarray')
             
         else:
@@ -376,12 +361,12 @@ class onedspec(object):
         return self.__pow__(spectrum, **kwargs)
     
     
-    def interpolate(self, wl_reference, mode='linear'):
+    def interpolate(self, wl_reference, mode='linear', bounds_error=True, fill_value=np.nan):
         """Interpolate the spectrum on the reference wavelength grid."""
         
-        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
-        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
-        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=False, fill_value=np.NaN)
+        f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=bounds_error, fill_value=fill_value)
+        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=bounds_error, fill_value=np.NaN)
+        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=False)
         
         if isinstance(wl_reference, float):
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
@@ -389,15 +374,6 @@ class onedspec(object):
             interp_flux = f(wl_reference)
             interp_var = f_var(wl_reference)
             interp_dq = f_dq(wl_reference)
-            
-            bounded_idxs = np.isfinite(interp_flux)
-            if np.sum(bounded_idxs) == 0:
-                raise ValueError('The wavelength region to interpolate to does not overlap with the wavelength of the given spectrum.')
-
-            wl_reference = wl_reference[bounded_idxs]
-            interp_flux = interp_flux[bounded_idxs]
-            interp_var = interp_var[bounded_idxs]
-            interp_dq = interp_dq[bounded_idxs]    
             interp_dq = np.floor(interp_dq).astype(bool)
             
             return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, dq = interp_dq)
@@ -538,7 +514,7 @@ class onedspec(object):
         if isLog:
             return smoothLogSpec
         else:
-            return smoothLogSpec.interpolate(self.wave)
+            return smoothLogSpec.interpolate(self.wave, bounds_error=False, fill_value=0.0)
         
         
         
