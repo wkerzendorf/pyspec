@@ -140,7 +140,7 @@ class onedspec(object):
     @classmethod
     def from_ascii(cls, filename, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0, **kwargs):
         """use the same kwargs with loadtxt"""
-        data = np.loadtxt(filename, comments='#', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0)
+        data = np.loadtxt(filename, comments='#', delimiter=delimiter, converters=converters, skiprows=skiprows, usecols=usecols, unpack=unpack, ndmin=ndmin)
 
         return cls(data[:,:2], mode='ndarray', **kwargs)
 
@@ -149,13 +149,18 @@ class onedspec(object):
         fitsFile = pyfits.open(filename, **kwargs)
         header = fitsFile[0].header
         if not (header.has_key('CDELT1') or header.has_key('CD1_1')) and not header.has_key('CRVAL1'):
-            raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1).\n'
+            raise ValueError('Could not find spectrum WCS keywords: CDELT1 or CD1_1.\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
             
         if not (header.has_key('CRVAL1') and header.has_key('CRPIX1') and header.has_key('NAXIS1')):
             raise ValueError('Could not find spectrum WCS keywords: CRVAL1, CRPIX1 and NAXIS1).\n'
                              'onedspec can\'t create a spectrum from this fitsfile')
-        wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*header['CDELT1']
+        if 'CDELT1' in header:
+            stepsize = header['CDELT1']
+        elif 'CD1_1' in header:
+            stepsize = header['CD1_1']
+            
+        wave = header['CRVAL1'] + np.arange(header['NAXIS1'])*stepsize
         if header.has_key('LTV1'):
             wave -= header['LTV1']
             
@@ -378,7 +383,7 @@ class onedspec(object):
             
             return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, dq = interp_dq)
         
-    def interpolate_log(self, smallDelta=None, mode='linear'):
+    def interpolate_log(self, smallDelta=None, mode='linear', bounds_error=False, fill_value=0.0):
         """
             smallDelta is the wavelength delta that will be used when
                     interpolating on logspace
@@ -392,7 +397,7 @@ class onedspec(object):
         
         logWave =  10**np.arange(np.log10(minWave), np.log10(maxWave), np.log10(maxWave/(maxWave-smallDelta)))
         
-        return smallDelta, self.interpolate(logWave, mode=mode)
+        return smallDelta, self.interpolate(logWave, mode=mode, bounds_error=bounds_error, fill_value=fill_value)
         
     
     def add_noise(self, reqS2N, assumS2N=np.inf):
@@ -412,7 +417,7 @@ class onedspec(object):
         return self.__class__(self.wave, newy, mode='waveflux')
 
 
-    def shift_velocity(self, v=None, z=None, interp=True):
+    def shift_velocity(self, v=None, z=None, interp=True, bounds_error=False, fill_value=0.0):
         """
             shift the spectrum given a velocity or a redshift. velocity is assumed to be in km/s
             interp if set to true will shift but then interpolate onto the old wavelength grid
@@ -430,7 +435,7 @@ class onedspec(object):
                                        mode='waveflux', var=self.var, dq=self.dq)
             
         if interp:
-            return shiftSpec.interpolate(self.wave)
+            return shiftSpec.interpolate(self.wave, bounds_error=bounds_error, fill_value=fill_value)
         else:
             return shiftSpec
     
@@ -448,7 +453,7 @@ class onedspec(object):
         
         return self.__class__(self.wave, newFlux, mode='waveflux', var=self.var, dq=self.dq)
     
-    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None, isLog=False, convolveMode='nearest'):
+    def convolve_rotation(self, vrot, beta=0.4, smallDelta=None, isLog=False, convolveMode='nearest', bounds_error=False, fill_value=0.0):
         """
             Convolves the spectrum with a rotational kernel
             vrot is given in km/s
@@ -460,7 +465,7 @@ class onedspec(object):
         """
         
         if not isLog:
-            smallDelta, logSpec = self.interpolate_log(smallDelta)
+            smallDelta, logSpec = self.interpolate_log(smallDelta, bounds_error=bounds_error, fill_value=fill_value)
         else:
             smallDelta = self.wave[-1]-self.wave[-2]
             logSpec = self
@@ -484,7 +489,7 @@ class onedspec(object):
         if isLog:
             return rotLogSpec
         else:
-            return rotLogSpec.interpolate(self.wave)
+            return rotLogSpec.interpolate(self.wave, bounds_error=bounds_error, fill_value=fill_value)
         
     def convolve_profile(self, R, initialR = np.inf, smallDelta=None, isLog=False, convolveMode='nearest'):
         """

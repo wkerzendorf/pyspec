@@ -158,7 +158,7 @@ def continuum(synthetic_spectrum, arc_spectrum, **kwargs):
     return (continuum, continuum_regions, sigma)
     
 
-def fitprofs(spectrum, lines, peak_tol=1.5):
+def fitprofs(spectrum, lines, peak_tol=1.5, base=None):
     """
     
     Fits a profile to a given spectrum at the line point. The peak value must be
@@ -179,6 +179,7 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
                     zero if the peak of the profile is already known.
                     
                     
+    base        : where to start the base of the gaussian fit (e.g. 1 for normalized . 
     Outputs
     -------
     
@@ -231,23 +232,20 @@ def fitprofs(spectrum, lines, peak_tol=1.5):
         index = scipy.where(peak_spectrum.flux==peak)[0][0]
         position = peak_spectrum.wave[index]
         
-        index = spectrum.wave.searchsorted(position)
         
         
-        p, m = 0, 0
-        num = len(spectrum.flux)
         
-        while (num > index + p + 1) and (spectrum.flux[index + p] > spectrum.flux[index + p + 1]):
-            p += 1
-            
-        while (index - m - 1 > 0) and (spectrum.flux[index - m] > spectrum.flux[index - m - 1]):
-            m += 1
+        if base is None:
+            base = np.median(spectrum.flux)
+        
+        if width is None:
+            width=5
     
-        fitfunc = lambda p, x: p[0] * np.exp(-(x - p[1])**2 / (2.0 * p[2]**2))
+        fitfunc = lambda p, x: p[0]+ p[1] * np.exp(-(x - p[2])**2 / (2.0 * p[3]**2))
         errfunc = lambda p, x, y: fitfunc(p, x) - y
         
-        p0 = scipy.c_[peak, position, 5]
-        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(spectrum[index - m:p + index].wave, spectrum[index - m:p + index].flux))
+        p0 = scipy.c_[base, peak, position, width]
+        p1, success = scipy.optimize.leastsq(errfunc, p0.copy()[0], args=(peak_spectrum.wave, peak_spectrum.flux))
         
         profiles.append(tuple(p1))
         
