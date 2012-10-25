@@ -428,11 +428,11 @@ class onedspec(object):
         c=3e5
         if v != None:
             shiftSpec = self.__class__(self.wave * np.sqrt((1+v/c)/(1-v/c)), self.flux,
-                                       mode='waveflux', var=self.var, dq=self.dq)
+                                       mode='waveflux', var=self.var, mask=self.mask)
             
         elif z!=None:
             shiftSpec = self.__class__(self.wave*(1+z) , self.flux,
-                                       mode='waveflux', var=self.var, dq=self.dq)
+                                       mode='waveflux', var=self.var, mask=self.mask)
             
         if interp:
             return shiftSpec.interpolate(self.wave, bounds_error=bounds_error, fill_value=fill_value)
@@ -451,7 +451,7 @@ class onedspec(object):
         newFlux = ndimage.gaussian_filter1d(self.flux, kernel, **kwargs)
         
         
-        return self.__class__(self.wave, newFlux, mode='waveflux', var=self.var, dq=self.dq)
+        return self.__class__(self.wave, newFlux, mode='waveflux', var=self.var, mask=self.mask)
     
     def convolve_rotation(self, vrot, beta=0.4, smallDelta=None, isLog=False, convolveMode='nearest', bounds_error=False, fill_value=0.0):
         """
