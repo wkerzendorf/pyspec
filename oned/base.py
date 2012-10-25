@@ -250,11 +250,9 @@ class onedspec(object):
         
         self.mask = kwargs.get('mask', None)
         self.error = kwargs.get('error', None)
-        
-        if kwargs.has_key('dq'):
-            self.dq = kwargs['dq']
+
         else:
-            self.dq = np.ones(self.data.shape[0]).astype(bool)
+            self.mask = np.ones(self.data.shape[0]).astype(bool)
         
         if kwargs.has_key('var'):
             self.var = kwargs['var']
@@ -264,7 +262,16 @@ class onedspec(object):
         
         self.op_mode = 'on_resolution'
         return None
-        
+
+
+    @property
+    def mask(self):
+        return self._mask
+
+    @mask.setter
+    def mask(self, value):
+        self._mask = value.astype(bool)
+
     def getWavelength(self):
         return self.data[:, 0]
     def setWavelength(self, x):
@@ -371,17 +378,17 @@ class onedspec(object):
         
         f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=bounds_error, fill_value=fill_value)
         f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=bounds_error, fill_value=np.NaN)
-        f_dq = interpolate.interp1d(self.wave, self.dq.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=False)
+        f_mask = interpolate.interp1d(self.wave, self.mask.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=False)
         
         if isinstance(wl_reference, float):
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
         else:
             interp_flux = f(wl_reference)
             interp_var = f_var(wl_reference)
-            interp_dq = f_dq(wl_reference)
-            interp_dq = np.floor(interp_dq).astype(bool)
+            interp_mask = f_mask(wl_reference)
+            interp_mask = np.floor(interp_mask).astype(bool)
             
-            return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, dq = interp_dq)
+            return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, mask = interp_mask)
         
     def interpolate_log(self, smallDelta=None, mode='linear', bounds_error=False, fill_value=0.0):
         """
