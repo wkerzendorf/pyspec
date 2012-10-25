@@ -288,7 +288,15 @@ class onedspec(object):
 
     @mask.setter
     def mask(self, value):
-        self._mask = value.astype(bool)
+        if value is not None:
+            self._mask = value.astype(bool)
+        else:
+            self._mask = None
+
+    @property
+    def ma(self):
+        return np.ma.MaskedArray(self.flux, mask=self._mask)
+
 
     def __getitem__(self, index):
 
@@ -374,7 +382,7 @@ class onedspec(object):
         
         f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=bounds_error, fill_value=fill_value)
         f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=bounds_error, fill_value=np.NaN)
-        f_mask = interpolate.interp1d(self.wave, self.mask.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=False)
+        f_mask = interpolate.interp1d(self.wave, self.mask.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=1.)
         
         if isinstance(wl_reference, float):
             return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
@@ -382,7 +390,7 @@ class onedspec(object):
             interp_flux = f(wl_reference)
             interp_var = f_var(wl_reference)
             interp_mask = f_mask(wl_reference)
-            interp_mask = np.floor(interp_mask).astype(bool)
+            interp_mask = np.ceil(interp_mask).astype(bool)
             
             return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, mask = interp_mask)
         
