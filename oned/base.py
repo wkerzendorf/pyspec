@@ -251,8 +251,6 @@ class onedspec(object):
         self.mask = kwargs.get('mask', None)
         self.error = kwargs.get('error', None)
 
-        else:
-            self.mask = np.ones(self.data.shape[0]).astype(bool)
         
         if kwargs.has_key('var'):
             self.var = kwargs['var']
@@ -264,13 +262,7 @@ class onedspec(object):
         return None
 
 
-    @property
-    def mask(self):
-        return self._mask
 
-    @mask.setter
-    def mask(self, value):
-        self._mask = value.astype(bool)
 
     def getWavelength(self):
         return self.data[:, 0]
@@ -286,13 +278,17 @@ class onedspec(object):
         return self.data[:, 0], self.data[:, 1]
     def index(self, wl):
         return self.wave.searchsorted(wl)
+
     wave = property(getWavelength, setWavelength)
     flux = property(getFlux, setFlux)
-    
-    
     xy=property(getXY, setXY)
+    @property
+    def mask(self):
+        return self._mask
 
-        
+    @mask.setter
+    def mask(self, value):
+        self._mask = value.astype(bool)
 
     def __getitem__(self, index):
 
