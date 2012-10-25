@@ -381,16 +381,27 @@ class onedspec(object):
         """Interpolate the spectrum on the reference wavelength grid."""
         
         f = interpolate.interp1d(self.wave, self.flux, kind=mode, copy=False, bounds_error=bounds_error, fill_value=fill_value)
-        f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=bounds_error, fill_value=np.NaN)
-        f_mask = interpolate.interp1d(self.wave, self.mask.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=1.)
-        
+        if self.var is not None:
+            f_var = interpolate.interp1d(self.wave, self.var, kind=mode, copy=False, bounds_error=bounds_error, fill_value=np.NaN)
+        if self.mask is not None:
+            f_mask = interpolate.interp1d(self.wave, self.mask.astype(np.float), kind=mode, copy=False, bounds_error=bounds_error, fill_value=1.)
+        else:
+            f_mask = None
+
         if isinstance(wl_reference, float):
-            return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray')
+            return self.__class__(np.array([wl_reference, f(wl_reference)]), mode='ndarray', mask=f_mask)
         else:
             interp_flux = f(wl_reference)
-            interp_var = f_var(wl_reference)
-            interp_mask = f_mask(wl_reference)
-            interp_mask = np.ceil(interp_mask).astype(bool)
+            if self.var is not None:
+                interp_var = f_var(wl_reference)
+            else:
+                interp_var = None
+
+
+            if self.mask is not None:
+                interp_mask = np.ceil(f_mask(wl_reference)).astype(bool)
+            else:
+                interp_mask = None
             
             return self.__class__(wl_reference, interp_flux, mode='waveflux', var = interp_var, mask = interp_mask)
         
