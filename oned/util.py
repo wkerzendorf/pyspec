@@ -604,7 +604,10 @@ def continuum2(spectrum, low_rej=2., high_rej=3., function='legendre', maxiter=3
         fitfunc = fitChebyshev
 
     contFlux = fitfunc(spectrum.wave, spectrum.flux)
-    mask = spectrum.mask
+    if spectrum.mask is None:
+        mask = np.ones_like(spectrum.wave).astype(bool)
+    else:
+        mask = spectrum.mask
     high_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
     low_rej_mask = np.zeros(spectrum.wave.shape).astype(bool)
     for i in range(maxiter):
